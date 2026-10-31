@@ -12,3 +12,5 @@ tags:
   - 费用
   - WebUI
   - 数据可视化
+support_platforms:
+  - aiocqhttp

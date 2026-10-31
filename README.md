@@ -2,6 +2,13 @@
 
 AstrBot 的 **DeepSeek API 用量与费用** 插件（只针对 DeepSeek）。统计 AstrBot 侧每次模型调用的 token 用量，按 DeepSeek 官方价目表估算花费，并提供一个带图表的 WebUI 仪表盘。
 
+## 支持平台
+
+**仅支持 QQ（OneBot v11 / `aiocqhttp`）。**
+
+私聊/群聊的识别依赖 aiocqhttp 的消息类型（`FriendMessage` / `GroupMessage`），其他平台（Telegram、Discord、飞书等）未做适配。
+
+
 ## 功能
 
 - **QQ 命令**：`/用量 [天数]`（别名：`花费`、`费用`、`查费用`、`查用量`）
