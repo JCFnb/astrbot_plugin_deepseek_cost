@@ -1,7 +1,7 @@
 name: astrbot_plugin_cost
-display_name: API 用量与费用
-short_desc: 查看 AstrBot 的 token 用量和 DeepSeek API 花费
-desc: 基于本地 provider_stats 统计 token 用量，并按 DeepSeek 官方价目表估算费用（按高峰/空闲时段区分）。
+display_name: DeepSeek 用量与费用
+short_desc: 查看 AstrBot 的 DeepSeek API 用量与花费
+desc: 仅针对 DeepSeek：基于本地 provider_stats 统计 token 用量，并按 DeepSeek 官方价目表估算费用（区分高峰/空闲时段）。
 version: 1.0.0
 author: local
 repo: ""

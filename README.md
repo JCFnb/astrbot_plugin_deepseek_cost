@@ -1,6 +1,6 @@
-# astrbot_plugin_cost
+# astrbot_plugin_deepseek_cost
 
-AstrBot 的 **API 用量与费用** 插件：统计 AstrBot 侧每次模型调用的 token 用量，按 DeepSeek 官方价目表估算花费，并提供一个 WebUI 仪表盘页面。
+AstrBot 的 **DeepSeek API 用量与费用** 插件（只针对 DeepSeek）：统计 AstrBot 侧每次模型调用的 token 用量，按 DeepSeek 官方价目表估算花费，并提供一个 WebUI 仪表盘页面。
 
 ## 功能
 
