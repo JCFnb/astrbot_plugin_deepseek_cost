@@ -15,7 +15,6 @@ def _default_db_path() -> str:
         return env
     candidates: list[Path] = []
     try:
-        # 插件位于 <AstrBot 数据目录>/plugins/<插件名>/main.py
         candidates.append(Path(__file__).resolve().parents[2] / "data_v4.db")
     except Exception:
         pass
@@ -37,8 +36,8 @@ def _default_db_path() -> str:
 
 
 DB_PATH = _default_db_path()
-
 BJ = timezone(timedelta(hours=8))
+KINDS = ("private", "group", "other")
 
 PRICES = {
     "deepseek-flash": {
@@ -73,15 +72,33 @@ def _fmt_tokens(n: int) -> str:
     return str(n)
 
 
+def _parse_umo(umo: str) -> tuple[str, str, str, str, str]:
+    parts = str(umo or "").split(":")
+    platform = parts[0] if len(parts) > 0 else "unknown"
+    mtype = parts[1] if len(parts) > 1 else ""
+    sid = parts[2] if len(parts) > 2 else ""
+    low = mtype.lower()
+    if "group" in low:
+        kind = "group"
+        label = f"群聊 {sid}"
+    elif "friend" in low or "private" in low:
+        kind = "private"
+        label = f"私聊 {sid}"
+    else:
+        kind = "other"
+        label = f"{platform} {sid}"
+    return platform, mtype, sid, kind, label
+
+
 def _iter_rows():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     rows = cur.execute(
-        "select provider_model, token_input_other, token_input_cached, token_output, start_time, created_at "
+        "select provider_model, token_input_other, token_input_cached, token_output, start_time, created_at, umo "
         "from provider_stats where status='completed'"
     ).fetchall()
     con.close()
-    for model, tin, tcached, tout, start_time, created_at in rows:
+    for model, tin, tcached, tout, start_time, created_at, umo in rows:
         try:
             if start_time:
                 dt = datetime.fromtimestamp(float(start_time), BJ)
@@ -89,7 +106,21 @@ def _iter_rows():
                 dt = datetime.strptime(str(created_at), "%Y-%m-%d %H:%M:%S").replace(tzinfo=BJ)
         except Exception:
             continue
-        yield model or "unknown", int(tin or 0), int(tcached or 0), int(tout or 0), dt
+        yield model or "unknown", int(tin or 0), int(tcached or 0), int(tout or 0), dt, umo or ""
+
+
+def _reply_counts() -> dict[str, int]:
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
+    result: dict[str, int] = {}
+    for user_id, content in cur.execute("select user_id, content from conversations"):
+        try:
+            data = json.loads(content or "[]")
+        except Exception:
+            continue
+        result[user_id] = sum(1 for m in data if isinstance(m, dict) and m.get("role") == "assistant")
+    con.close()
+    return result
 
 
 def _collect(days: int) -> dict:
@@ -102,8 +133,13 @@ def _collect(days: int) -> dict:
     by_model: dict[str, dict] = {}
     by_day: dict[str, float] = {}
     recent: list[dict] = []
+    replies_map = _reply_counts()
+    convs: dict[str, dict] = {}
+    kinds: dict[str, dict] = {
+        k: {"requests": 0, "tokens": 0, "cost": 0.0} for k in KINDS
+    }
 
-    for model, tin, tcached, tout, dt in _iter_rows():
+    for model, tin, tcached, tout, dt, umo in _iter_rows():
         if dt < since:
             continue
         p = _price_for(model, dt)
@@ -134,7 +170,34 @@ def _collect(days: int) -> dict:
             "cache": tcached,
             "output": tout,
             "cost": round(c, 4),
+            "umo": umo,
         })
+
+        platform, mtype, sid, kind, label = _parse_umo(umo)
+        conv = convs.setdefault(umo, {
+            "umo": umo,
+            "platform": platform,
+            "kind": kind,
+            "label": label,
+            "requests": 0,
+            "input": 0,
+            "cache": 0,
+            "output": 0,
+            "tokens": 0,
+            "cost": 0.0,
+            "replies": replies_map.get(umo, 0),
+        })
+        conv["requests"] += 1
+        conv["input"] += tin
+        conv["cache"] += tcached
+        conv["output"] += tout
+        conv["tokens"] += tokens
+        conv["cost"] += c
+
+        k = kinds[kind]
+        k["requests"] += 1
+        k["tokens"] += tokens
+        k["cost"] += c
 
     series = []
     for i in range(days):
@@ -143,6 +206,28 @@ def _collect(days: int) -> dict:
 
     recent.sort(key=lambda x: x["time"], reverse=True)
     total_tokens = total_in + total_cache + total_out
+
+    conv_list = []
+    for item in convs.values():
+        item["cost"] = round(item["cost"], 4)
+        item["avg_call"] = round(item["cost"] / item["requests"], 4) if item["requests"] else 0
+        item["avg_reply"] = round(item["cost"] / item["replies"], 4) if item["replies"] else 0
+        item["cache_rate"] = (
+            round(item["cache"] / item["tokens"] * 100, 1) if item["tokens"] else 0
+        )
+        item["share"] = round(item["cost"] / cost * 100, 1) if cost else 0
+        conv_list.append(item)
+    conv_list.sort(key=lambda x: x["cost"], reverse=True)
+
+    kinds_out = {}
+    for k, v in kinds.items():
+        kinds_out[k] = {
+            "requests": v["requests"],
+            "tokens": v["tokens"],
+            "cost": round(v["cost"], 4),
+            "share": round(v["cost"] / cost * 100, 1) if cost else 0,
+        }
+
     return {
         "days": days,
         "requests": requests,
@@ -158,26 +243,18 @@ def _collect(days: int) -> dict:
         "models": by_model,
         "series": series,
         "recent": recent[:8],
+        "conversations": conv_list,
+        "kinds": kinds_out,
     }
 
 
 def _assistant_count() -> int:
-    con = sqlite3.connect(DB_PATH)
-    cur = con.cursor()
-    n = 0
-    for (content,) in cur.execute("select content from conversations"):
-        try:
-            data = json.loads(content or "[]")
-        except Exception:
-            continue
-        n += sum(1 for m in data if isinstance(m, dict) and m.get("role") == "assistant")
-    con.close()
-    return n
+    return sum(_reply_counts().values())
 
 
 def _all_time_cost() -> float:
     cost = 0.0
-    for model, tin, tcached, tout, dt in _iter_rows():
+    for model, tin, tcached, tout, dt, _umo in _iter_rows():
         p = _price_for(model, dt)
         cost += (tin / 1_000_000) * p["miss"] + (tcached / 1_000_000) * p["cache"] + (tout / 1_000_000) * p["out"]
     return cost
@@ -193,6 +270,10 @@ def summarize(days: int = 1) -> str:
             f"· {model}：输入 {_fmt_tokens(m['input'])}（缓存命中 {_fmt_tokens(m['cache'])}），"
             f"输出 {_fmt_tokens(m['output'])}，约 ¥{m['cost']:.4f}"
         )
+    k = s["kinds"]
+    lines.append(
+        f"私聊 ¥{k['private']['cost']:.4f} · 群聊 ¥{k['group']['cost']:.4f}"
+    )
     lines.append(
         f"合计：请求 {s['requests']} 次，输入 {_fmt_tokens(s['input'])}（缓存 {_fmt_tokens(s['cache'])}），"
         f"输出 {_fmt_tokens(s['output'])}，约 ¥{s['cost']:.4f}"

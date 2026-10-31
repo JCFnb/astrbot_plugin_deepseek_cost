@@ -1,14 +1,20 @@
 # astrbot_plugin_deepseek_cost
 
-AstrBot 的 **DeepSeek API 用量与费用** 插件（只针对 DeepSeek）：统计 AstrBot 侧每次模型调用的 token 用量，按 DeepSeek 官方价目表估算花费，并提供一个 WebUI 仪表盘页面。
+AstrBot 的 **DeepSeek API 用量与费用** 插件（只针对 DeepSeek）。统计 AstrBot 侧每次模型调用的 token 用量，按 DeepSeek 官方价目表估算花费，并提供一个带图表的 WebUI 仪表盘。
 
 ## 功能
 
 - **QQ 命令**：`/用量 [天数]`（别名：`花费`、`费用`、`查费用`、`查用量`）
-- **AI 工具**：`get_api_cost(days)`，机器人可以在被问“今天花了多少钱”时自己查询
-- **WebUI 页面**：请求次数、回复消息数、时段花费、平均每条回复花费、平均每次请求、缓存命中率、每日趋势图、高峰/空闲分布、模型明细、最近调用
+- **AI 工具**：`get_api_cost(days)`，机器人被问“今天花了多少钱”时可自己查询
+- **WebUI 仪表盘**：
+  - 请求次数、回复消息数、时段花费、平均每条回复、平均每次请求、缓存命中率
+  - **私聊 / 群聊花费拆分**（环形图 + 明细）
+  - **对话排行榜**：每个对话的调用次数、tokens、命中率、费用、每次均价、占比，可筛选私聊/群聊
+  - 每日花费趋势折线图
+  - 高峰 / 空闲分布
+  - 模型明细、最近调用
 - 自动区分 DeepSeek **高峰 / 空闲时段** 价格
-- 支持深浅色主题，页面动效与骨架屏加载
+- 深浅色主题、动画与骨架屏
 
 ## 安装
 
@@ -18,7 +24,7 @@ AstrBot 的 **DeepSeek API 用量与费用** 插件（只针对 DeepSeek）：�
 <AstrBot 数据目录>/plugins/astrbot_plugin_cost/
 ```
 
-然后在 AstrBot WebUI 的「插件」页面启用即可（无需额外 pip 依赖）。
+然后在 AstrBot WebUI 的「插件」页面启用即可（无额外 pip 依赖）。
 
 ## 使用
 
@@ -29,11 +35,12 @@ AstrBot 的 **DeepSeek API 用量与费用** 插件（只针对 DeepSeek）：�
 /用量 7        # 最近 7 天
 ```
 
-WebUI：`插件` → `API 用量与费用` → 打开 `cost` 页面。
+WebUI：`插件` → `DeepSeek 用量与费用` → 打开 `cost` 页面。
 
 ## 数据与价格
 
 - 数据来源：AstrBot 本地数据库 `data_v4.db` 中的 `provider_stats` 表（仅统计 `status='completed'` 的调用）。
+- 私聊/群聊与对话标识来自 `provider_stats.umo`，回复数来自 `conversations` 表中的 assistant 消息。
 - 价格写在 `main.py` 顶部的 `PRICES` 中，单位：**元 / 百万 tokens**：
 
 | 模型 | 缓存命中（高峰/空闲） | 缓存未命中（高峰/空闲） | 输出（高峰/空闲） |
@@ -57,7 +64,8 @@ WebUI：`插件` → `API 用量与费用` → 打开 `cost` 页面。
 ## 说明
 
 - 统计与费用为**本地估算**，实际扣费以 DeepSeek 控制台账单为准；
-- 只统计 AstrBot 通过 provider 产生的调用，不包含其他程序使用同一 API Key 的消耗。
+- 只统计 AstrBot 通过 provider 产生的调用，不包含其他程序使用同一 API Key 的消耗；
+- 对话回复数来自会话历史（全量），费用/tokens 为所选时间范围内。
 
 ## License
 

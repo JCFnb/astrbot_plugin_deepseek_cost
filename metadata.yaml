@@ -1,8 +1,14 @@
 name: astrbot_plugin_cost
 display_name: DeepSeek 用量与费用
-short_desc: 查看 AstrBot 的 DeepSeek API 用量与花费
-desc: 仅针对 DeepSeek：基于本地 provider_stats 统计 token 用量，并按 DeepSeek 官方价目表估算费用（区分高峰/空闲时段）。
-version: 1.0.0
-author: local
-repo: ""
+short_desc: 查看 AstrBot 的 DeepSeek API 用量与花费，私聊/群聊分列、对话排行榜与图表
+desc: 仅针对 DeepSeek：基于本地 provider_stats 统计 token 用量，按官方价目表估算费用（区分高峰/空闲时段），提供私聊/群聊拆分、对话排行榜、每日趋势、缓存命中率、模型明细和最近调用，并附带 WebUI 仪表盘。
+version: 1.2.0
+author: JCFnb
+repo: https://github.com/JCFnb/astrbot_plugin_deepseek_cost
 astrbot_version: ">=4.24.0"
+tags:
+  - deepseek
+  - 用量统计
+  - 费用
+  - WebUI
+  - 数据可视化
