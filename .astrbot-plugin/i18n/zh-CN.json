@@ -1,0 +1,4 @@
+{
+  "metadata": { "display_name": "API 用量与费用" },
+  "views": { "cost": { "title": "API 用量与费用" } }
+}

@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API 用量与费用</title>
+<script src="/api/plugin/page/bridge-sdk.js"></script>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #faf6f0;
+    --bg-glow: radial-gradient(1100px 480px at 12% -8%, rgba(255,196,120,.20), transparent 62%),
+               radial-gradient(900px 420px at 92% 0%, rgba(120,160,255,.16), transparent 60%);
+    --card: rgba(255,252,247,.88);
+    --card-2: rgba(255,250,243,.72);
+    --line: rgba(120,100,80,.14);
+    --text: #2b2622;
+    --muted: #8a7f72;
+    --accent: #5b8def;
+    --accent-2: #8b6cf0;
+    --warm: #e8a15c;
+    --green: #2f9e6e;
+    --amber: #d9822b;
+    --red: #d9534f;
+    --shadow: 0 12px 32px rgba(120,90,60,.10);
+    --shadow-hover: 0 18px 44px rgba(120,90,60,.16);
+    --radius: 18px;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d0f14;
+    --bg-glow: radial-gradient(1100px 480px at 12% -8%, rgba(232,161,92,.14), transparent 62%),
+               radial-gradient(900px 420px at 92% 0%, rgba(91,141,239,.14), transparent 60%);
+    --card: rgba(24,27,34,.86);
+    --card-2: rgba(30,34,42,.72);
+    --line: rgba(255,255,255,.08);
+    --text: #ece7df;
+    --muted: #a1968a;
+    --shadow: 0 14px 38px rgba(0,0,0,.46);
+    --shadow-hover: 0 20px 52px rgba(0,0,0,.58);
+  }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) {
+      --bg: #0d0f14;
+      --bg-glow: radial-gradient(1100px 480px at 12% -8%, rgba(232,161,92,.14), transparent 62%),
+                 radial-gradient(900px 420px at 92% 0%, rgba(91,141,239,.14), transparent 60%);
+      --card: rgba(24,27,34,.86);
+      --card-2: rgba(30,34,42,.72);
+      --line: rgba(255,255,255,.08);
+      --text: #ece7df;
+      --muted: #a1968a;
+      --shadow: 0 14px 38px rgba(0,0,0,.46);
+      --shadow-hover: 0 20px 52px rgba(0,0,0,.58);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; padding: 30px;
+    background: var(--bg); background-image: var(--bg-glow);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes shimmer { to { transform: translateX(100%); } }
+  @keyframes pulseDot { 0%,100% { transform: scale(1); opacity: .9; } 50% { transform: scale(1.35); opacity: .55; } }
+
+  .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin-bottom: 24px; animation: rise .5s ease both; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12px; letter-spacing: .04em;
+    color: #a5621d;
+    background: linear-gradient(135deg, rgba(232,161,92,.18), rgba(255,196,120,.10));
+    border: 1px solid rgba(232,161,92,.32);
+    padding: 5px 11px; border-radius: 999px; margin-bottom: 10px;
+  }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--warm); animation: pulseDot 2.4s ease-in-out infinite; }
+  h1 { margin: 0; font-size: 27px; line-height: 1.2; letter-spacing: -.02em; }
+  .sub { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+
+  .seg { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .seg button {
+    position: relative; border: 0; background: transparent; color: var(--muted);
+    font-size: 13px; padding: 8px 17px; border-radius: 999px; cursor: pointer;
+    transition: color .2s ease, background .25s ease, transform .15s ease;
+  }
+  .seg button:hover { color: var(--text); }
+  .seg button:active { transform: scale(.97); }
+  .seg button.on { color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 8px 18px rgba(91,141,239,.35); }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 18px; }
+  .stat {
+    position: relative; overflow: hidden;
+    background: linear-gradient(180deg, var(--card), var(--card-2));
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px; box-shadow: var(--shadow);
+    backdrop-filter: blur(12px);
+    opacity: 0; animation: rise .55s cubic-bezier(.2,.7,.2,1) forwards;
+    animation-delay: calc(var(--i, 0) * 70ms);
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
+  .stat:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+  .stat::after {
+    content: ""; position: absolute; top: -40px; right: -30px; width: 130px; height: 130px;
+    background: radial-gradient(circle, rgba(91,141,239,.20), transparent 70%);
+    pointer-events: none; transition: opacity .3s ease;
+  }
+  .stat.warm::after { background: radial-gradient(circle, rgba(232,161,92,.24), transparent 70%); }
+  .stat.green::after { background: radial-gradient(circle, rgba(47,158,110,.20), transparent 70%); }
+  .stat.violet::after { background: radial-gradient(circle, rgba(139,108,240,.20), transparent 70%); }
+  .stat .label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; margin-bottom: 10px; }
+  .stat .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(91,141,239,.16); }
+  .stat.green .dot { background: var(--green); box-shadow: 0 0 0 4px rgba(47,158,110,.16); }
+  .stat.warm .dot { background: var(--amber); box-shadow: 0 0 0 4px rgba(217,130,43,.16); }
+  .stat.violet .dot { background: var(--accent-2); box-shadow: 0 0 0 4px rgba(139,108,240,.16); }
+  .stat .value { font-size: 27px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .stat .foot { margin-top: 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .stat .bar { margin-top: 10px; height: 5px; border-radius: 999px; background: rgba(120,100,80,.12); overflow: hidden; }
+  .stat .bar > i { display: block; height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .9s cubic-bezier(.2,.7,.2,1); }
+
+  .panel {
+    background: linear-gradient(180deg, var(--card), var(--card-2));
+    border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); overflow: hidden; backdrop-filter: blur(12px);
+    margin-bottom: 18px; opacity: 0; animation: rise .6s ease .18s forwards;
+    transition: box-shadow .25s ease;
+  }
+  .panel:hover { box-shadow: var(--shadow-hover); }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .panel-head h2 { margin: 0; font-size: 14px; font-weight: 650; }
+  .panel-head .muted { color: var(--muted); font-size: 12px; }
+
+  .chart-wrap { padding: 14px 18px 4px; }
+  canvas { width: 100%; height: 96px; display: block; }
+  .chart-foot { display: flex; justify-content: space-between; color: var(--muted); font-size: 11.5px; padding: 0 18px 14px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 12px 18px; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; background: rgba(120,100,80,.045); }
+  tbody tr { transition: background .18s ease; }
+  tbody tr:hover { background: rgba(91,141,239,.055); }
+  tbody td { border-top: 1px solid var(--line); }
+  .model { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+  .chip { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .money { color: var(--green); font-weight: 650; }
+  .muted-cell { color: var(--muted); }
+  .empty { padding: 26px 18px; text-align: center; color: var(--muted); font-size: 13px; }
+
+  .skeleton { position: relative; overflow: hidden; background: rgba(120,100,80,.10); border-radius: 8px; color: transparent !important; }
+  .skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent); animation: shimmer 1.25s infinite; }
+
+  .err { margin-top: 2px; padding: 12px 14px; border-radius: 12px; background: rgba(217,83,79,.10); border: 1px solid rgba(217,83,79,.30); color: var(--red); font-size: 13px; display: none; }
+  .err.show { display: block; animation: rise .3s ease both; }
+  .footer { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; flex-wrap: wrap; padding: 2px 2px 6px; }
+
+  @media (max-width: 680px) {
+    body { padding: 16px; }
+    h1 { font-size: 22px; }
+    th, td { padding: 10px 12px; }
+    .stat .value { font-size: 23px; }
+    .hide-sm { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div>
+      <div class="badge">DeepSeek · API 用量</div>
+      <h1>用量与花费</h1>
+      <p class="sub">按官方价目估算 · 自动区分高峰 / 空闲时段 · 数据来自本地调用记录</p>
+    </div>
+    <div class="seg" id="seg">
+      <button data-days="1">今天</button>
+      <button data-days="7" class="on">近 7 天</button>
+      <button data-days="30">近 30 天</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat" style="--i:0">
+      <div class="label"><span class="dot"></span>请求次数</div>
+      <div class="value" id="requests">—</div>
+      <div class="foot" id="requestsFoot">近 7 天</div>
+    </div>
+    <div class="stat green" style="--i:1">
+      <div class="label"><span class="dot"></span>回复消息数</div>
+      <div class="value" id="replies">—</div>
+      <div class="foot">全部会话 assistant 消息</div>
+    </div>
+    <div class="stat warm" style="--i:2">
+      <div class="label"><span class="dot"></span>时段花费</div>
+      <div class="value" id="cost">—</div>
+      <div class="foot" id="costFoot">输入 / 缓存 / 输出</div>
+    </div>
+    <div class="stat violet" style="--i:3">
+      <div class="label"><span class="dot"></span>平均每条回复</div>
+      <div class="value" id="avg">—</div>
+      <div class="foot">历史总花费 ÷ 回复数</div>
+    </div>
+    <div class="stat" style="--i:4">
+      <div class="label"><span class="dot"></span>平均每次请求</div>
+      <div class="value" id="avgReq">—</div>
+      <div class="foot">时段花费 ÷ 请求次数</div>
+    </div>
+    <div class="stat green" style="--i:5">
+      <div class="label"><span class="dot"></span>缓存命中率</div>
+      <div class="value" id="cacheRate">—</div>
+      <div class="foot" id="cacheFoot">缓存 tokens 占比</div>
+      <div class="bar"><i id="cacheBar"></i></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h2>每日花费趋势</h2>
+      <span class="muted" id="trendHint">近 7 天</span>
+    </div>
+    <div class="chart-wrap"><canvas id="chart"></canvas></div>
+    <div class="chart-foot"><span id="chartMin">—</span><span id="chartMax">—</span></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h2>高峰 / 空闲分布</h2>
+      <span class="muted">高峰期：工作日 9-12、14-18 点</span>
+    </div>
+    <table>
+      <thead><tr><th>时段</th><th>tokens</th><th>费用</th><th>占比</th></tr></thead>
+      <tbody id="peakBody"></tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h2>模型用量明细</h2>
+      <span class="muted" id="rangeHint">近 7 天</span>
+    </div>
+    <table>
+      <thead>
+        <tr><th>模型</th><th>输入（未命中）</th><th>输入（缓存命中）</th><th>输出</th><th>费用</th></tr>
+      </thead>
+      <tbody id="tbody"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h2>最近调用</h2>
+      <span class="muted">最近 8 条</span>
+    </div>
+    <table>
+      <thead>
+        <tr><th>时间</th><th>模型</th><th class="hide-sm">输入</th><th class="hide-sm">缓存</th><th>输出</th><th>费用</th></tr>
+      </thead>
+      <tbody id="recentBody"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="err" id="err"></div>
+  <div class="footer">
+    <span>数据来源：AstrBot provider_stats（本地）</span>
+    <span>估算值，实际扣费以 DeepSeek 控制台账单为准</span>
+  </div>
+</div>
+
+<script>
+const fmt = (n) => {
+  n = Number(n) || 0;
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+  return String(n);
+};
+const money = (v) => {
+  v = Number(v) || 0;
+  if (v > 0 && v < 0.01) return '¥' + v.toFixed(4);
+  return '¥' + v.toFixed(2);
+};
+const setText = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+
+function animateNumber(el, target, formatter, duration = 700) {
+  if (!el) return;
+  const start = performance.now();
+  const from = 0;
+  const step = (now) => {
+    const p = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = formatter(from + (target - from) * eased);
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function applyTheme(isDark) { document.documentElement.dataset.theme = isDark ? 'dark' : 'light'; }
+
+function drawChart(series) {
+  const canvas = document.getElementById('chart');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 600;
+  const h = 96;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+  if (!series || !series.length) return;
+  const values = series.map(s => Number(s.cost) || 0);
+  const max = Math.max(...values, 0.0001);
+  const pad = 6;
+  const stepX = values.length > 1 ? (w - pad * 2) / (values.length - 1) : 0;
+  const y = v => h - pad - (v / max) * (h - pad * 2);
+  const pts = values.map((v, i) => [pad + i * stepX, y(v)]);
+
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, 'rgba(91,141,239,.32)');
+  grad.addColorStop(1, 'rgba(91,141,239,0)');
+
+  const start = performance.now();
+  const draw = (now) => {
+    const p = Math.min(1, (now - start) / 650);
+    const eased = 1 - Math.pow(1 - p, 3);
+    ctx.clearRect(0, 0, w, h);
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], h - pad);
+    pts.forEach(([x, yy]) => ctx.lineTo(x, h - (h - yy) * eased - pad * (1 - eased)));
+    ctx.lineTo(pts[pts.length - 1][0], h - pad);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.beginPath();
+    pts.forEach(([x, yy], i) => {
+      const yy2 = h - (h - yy) * eased - pad * (1 - eased);
+      i ? ctx.lineTo(x, yy2) : ctx.moveTo(x, yy2);
+    });
+    ctx.strokeStyle = '#5b8def';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    const last = pts[pts.length - 1];
+    ctx.beginPath();
+    ctx.arc(last[0], h - (h - last[1]) * eased - pad * (1 - eased), 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#5b8def';
+    ctx.fill();
+    if (p < 1) requestAnimationFrame(draw);
+  };
+  requestAnimationFrame(draw);
+  setText('chartMin', '最低 ¥' + Math.min(...values).toFixed(4));
+  setText('chartMax', '最高 ¥' + max.toFixed(4));
+}
+
+async function load(days) {
+  const err = document.getElementById('err');
+  err.classList.remove('show');
+  ['requests','replies','cost','avg','avgReq','cacheRate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.classList.add('skeleton'); el.textContent = '—'; }
+  });
+  document.getElementById('tbody').innerHTML = '<tr><td colspan="5" class="empty">加载中…</td></tr>';
+  document.getElementById('recentBody').innerHTML = '<tr><td colspan="6" class="empty">加载中…</td></tr>';
+  document.getElementById('peakBody').innerHTML = '';
+  try {
+    const view = window.AstrBotPluginView;
+    if (!view) throw new Error('页面桥接未加载，请刷新页面');
+    await view.ready();
+    const ctx = view.getContext && view.getContext();
+    if (ctx) applyTheme(!!ctx.isDark);
+
+    const d = await view.apiGet('/summary', { days: days });
+    const p = d.period || {};
+    const o = d.overall || {};
+
+    ['requests','replies','cost','avg','avgReq','cacheRate'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('skeleton');
+    });
+
+    animateNumber(document.getElementById('requests'), p.requests ?? 0, v => Math.round(v).toLocaleString());
+    animateNumber(document.getElementById('replies'), o.assistant_messages ?? 0, v => Math.round(v).toLocaleString());
+    animateNumber(document.getElementById('cost'), p.cost ?? 0, money);
+    animateNumber(document.getElementById('avg'), o.avg_per_reply ?? 0, money);
+    animateNumber(document.getElementById('avgReq'), p.avg_request ?? 0, money);
+    animateNumber(document.getElementById('cacheRate'), p.cache_rate ?? 0, v => v.toFixed(1) + '%');
+
+    setText('requestsFoot', '近 ' + (p.days ?? days) + ' 天');
+    setText('costFoot', '输入 ' + fmt(p.input) + ' · 缓存 ' + fmt(p.cache) + ' · 输出 ' + fmt(p.output));
+    setText('cacheFoot', '缓存 ' + fmt(p.cache) + ' / 总 ' + fmt(p.tokens));
+    setText('rangeHint', '近 ' + (p.days ?? days) + ' 天');
+    setText('trendHint', '近 ' + (p.days ?? days) + ' 天');
+    setTimeout(() => { const bar = document.getElementById('cacheBar'); if (bar) bar.style.width = Math.max(0, Math.min(100, Number(p.cache_rate) || 0)) + '%'; }, 120);
+
+    // 高峰/空闲
+    const peak = p.peak || {};
+    const idle = p.idle || {};
+    const pc = Number(peak.cost) || 0, ic = Number(idle.cost) || 0;
+    const total = pc + ic;
+    const pct = v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '—';
+    document.getElementById('peakBody').innerHTML = `
+      <tr><td><span class="model"><span class="chip" style="background:#d9822b"></span>高峰</span></td>
+          <td>${fmt(peak.tokens)}</td><td class="money">${money(pc)}</td><td>${pct(pc)}</td></tr>
+      <tr><td><span class="model"><span class="chip" style="background:#2f9e6e"></span>空闲</span></td>
+          <td>${fmt(idle.tokens)}</td><td class="money">${money(ic)}</td><td>${pct(ic)}</td></tr>`;
+
+    // 每日趋势
+    drawChart(p.series || []);
+
+    // 模型表
+    const models = p.models || {};
+    const rows = Object.entries(models).map(([name, m]) => `
+      <tr>
+        <td><span class="model"><span class="chip"></span>${name}</span></td>
+        <td>${fmt(m.input)}</td>
+        <td>${fmt(m.cache)}</td>
+        <td>${fmt(m.output)}</td>
+        <td class="money">${money(m.cost)}</td>
+      </tr>`);
+    document.getElementById('tbody').innerHTML = rows.length ? rows.join('') :
+      '<tr><td colspan="5" class="empty">该时段没有调用记录</td></tr>';
+
+    // 最近调用
+    const recent = p.recent || [];
+    const rr = recent.map(r => `
+      <tr>
+        <td class="muted-cell">${r.time}</td>
+        <td>${r.model}</td>
+        <td class="hide-sm">${fmt(r.input)}</td>
+        <td class="hide-sm">${fmt(r.cache)}</td>
+        <td>${fmt(r.output)}</td>
+        <td class="money">${money(r.cost)}</td>
+      </tr>`);
+    document.getElementById('recentBody').innerHTML = rr.length ? rr.join('') :
+      '<tr><td colspan="6" class="empty">该时段没有调用记录</td></tr>';
+  } catch (e) {
+    ['requests','replies','cost','avg','avgReq','cacheRate'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('skeleton');
+    });
+    err.textContent = '加载失败：' + (e && e.message ? e.message : e);
+    err.classList.add('show');
+    document.getElementById('tbody').innerHTML = '<tr><td colspan="5" class="empty">暂无数据</td></tr>';
+    document.getElementById('recentBody').innerHTML = '<tr><td colspan="6" class="empty">暂无数据</td></tr>';
+  }
+}
+
+document.getElementById('seg').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button');
+  if (!btn) return;
+  document.querySelectorAll('#seg button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  load(Number(btn.dataset.days));
+});
+
+window.addEventListener('resize', () => {
+  const btn = document.querySelector('#seg button.on');
+  load(Number(btn ? btn.dataset.days : 7));
+});
+
+if (window.matchMedia) {
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  applyTheme(mq.matches);
+  mq.addEventListener && mq.addEventListener('change', e => applyTheme(e.matches));
+}
+load(7);
+</script>
+</body>
+</html>
