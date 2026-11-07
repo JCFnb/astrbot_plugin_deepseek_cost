@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -123,8 +124,32 @@ def _reply_counts() -> dict[str, int]:
     return result
 
 
-def _collect(days: int) -> dict:
-    since = datetime.now(BJ) - timedelta(days=days)
+def _collect(days: int = 7, date_str: str | None = None) -> dict:
+    """统计指定自然日或最近 N 个自然日。
+
+    单日模式严格从当天 00:00 到次日 00:00，不做滚动 24 小时。
+    """
+    now = datetime.now(BJ)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    selected_date = ""
+    if date_str:
+        try:
+            selected_date = str(date_str).strip()
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", selected_date):
+                raise ValueError
+            start = datetime.strptime(selected_date, "%Y-%m-%d").replace(tzinfo=BJ)
+            end = start + timedelta(days=1)
+        except Exception:
+            selected_date = ""
+    if not selected_date:
+        days = max(1, min(int(days or 1), 90))
+        start = today - timedelta(days=days - 1)
+        end = None
+        period_label = "今天" if days == 1 else f"近 {days} 天"
+    else:
+        days = 1
+        period_label = "今天" if selected_date == today.strftime("%Y-%m-%d") else selected_date
+
     requests = 0
     total_in = total_cache = total_out = 0
     cost = 0.0
@@ -140,7 +165,7 @@ def _collect(days: int) -> dict:
     }
 
     for model, tin, tcached, tout, dt, umo in _iter_rows():
-        if dt < since:
+        if dt < start or (end is not None and dt >= end):
             continue
         p = _price_for(model, dt)
         c = (tin / 1_000_000) * p["miss"] + (tcached / 1_000_000) * p["cache"] + (tout / 1_000_000) * p["out"]
@@ -161,7 +186,7 @@ def _collect(days: int) -> dict:
         m["cache"] += tcached
         m["output"] += tout
         m["cost"] += c
-        day = dt.strftime("%m-%d")
+        day = dt.strftime("%Y-%m-%d")
         by_day[day] = by_day.get(day, 0.0) + c
         recent.append({
             "time": dt.strftime("%m-%d %H:%M"),
@@ -201,8 +226,12 @@ def _collect(days: int) -> dict:
 
     series = []
     for i in range(days):
-        d = (datetime.now(BJ) - timedelta(days=days - 1 - i)).strftime("%m-%d")
-        series.append({"day": d, "cost": round(by_day.get(d, 0.0), 4)})
+        d = (start + timedelta(days=i)).strftime("%Y-%m-%d")
+        series.append({
+            "day": d[5:],
+            "date": d,
+            "cost": round(by_day.get(d, 0.0), 4),
+        })
 
     recent.sort(key=lambda x: x["time"], reverse=True)
     total_tokens = total_in + total_cache + total_out
@@ -230,6 +259,10 @@ def _collect(days: int) -> dict:
 
     return {
         "days": days,
+        "date": selected_date or None,
+        "label": period_label,
+        "start": start.strftime("%Y-%m-%d %H:%M"),
+        "end": end.strftime("%Y-%m-%d %H:%M") if end else "现在",
         "requests": requests,
         "input": total_in,
         "cache": total_cache,
@@ -260,11 +293,12 @@ def _all_time_cost() -> float:
     return cost
 
 
-def summarize(days: int = 1) -> str:
-    s = _collect(days)
+def summarize(days: int = 1, date_str: str | None = None) -> str:
+    s = _collect(days, date_str)
+    label = s.get("label") or f"最近 {days} 天"
     if not s["models"]:
-        return f"最近 {days} 天没有 API 调用记录。"
-    lines = [f"最近 {days} 天 API 用量："]
+        return f"{label}没有 API 调用记录。"
+    lines = [f"{label} API 用量（{s.get('start', '')} 至 {s.get('end', '')}）："]
     for model, m in sorted(s["models"].items(), key=lambda x: -x[1]["cost"]):
         lines.append(
             f"· {model}：输入 {_fmt_tokens(m['input'])}（缓存命中 {_fmt_tokens(m['cache'])}），"
@@ -295,19 +329,22 @@ class CostPlugin(Star):
             logger.warning(f"[cost] 注册 Web API 失败: {exc}")
 
     async def _summary_api(self):
+        date_str = ""
         try:
             from quart import request as qreq
 
+            date_str = str(qreq.args.get("date", "") or "").strip()
             days = int(qreq.args.get("days", 7))
         except Exception:
             days = 7
         days = max(1, min(days, 90))
-        s = _collect(days)
+        s = _collect(days, date_str or None)
         assistant = _assistant_count()
         total_cost = _all_time_cost()
         return {
             "ok": True,
-            "days": days,
+            "days": s.get("days", days),
+            "date": s.get("date"),
             "period": s,
             "overall": {
                 "assistant_messages": assistant,
