@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -136,6 +136,71 @@
     border: 1px solid rgba(239, 71, 111, .25); font-size: 13px;
   }
   .err.show { display: block; }
+
+  /* ---------- shell + sidebar ---------- */
+  .shell {
+    display: grid; grid-template-columns: 228px minmax(0, 1fr);
+    gap: 16px; align-items: start;
+  }
+  .sidebar {
+    position: sticky; top: 16px;
+    display: grid; gap: 12px;
+  }
+  .side-card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow-sm);
+    padding: 14px;
+  }
+  .side-title {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-bottom: 12px; font-size: 12px; font-weight: 700;
+  }
+  .side-title span { color: var(--muted); font-weight: 500; font-size: 10.5px; }
+  .filter-field { display: grid; gap: 5px; margin-bottom: 10px; }
+  .filter-field:last-of-type { margin-bottom: 0; }
+  .filter-field label { color: var(--muted); font-size: 11px; }
+  .filter-field select {
+    width: 100%; border: 1px solid var(--line); border-radius: 9px;
+    background: var(--surface-2); color: var(--ink); font: inherit;
+    font-size: 12px; padding: 8px 9px;
+  }
+  .filter-reset {
+    width: 100%; margin-top: 11px; border: 1px solid var(--line);
+    border-radius: 9px; background: transparent; color: var(--muted);
+    font: inherit; font-size: 11.5px; padding: 8px; cursor: pointer;
+  }
+  .filter-reset:hover { color: var(--ink); background: var(--surface-2); }
+  .side-hint {
+    margin: 10px 0 0; color: var(--muted); font-size: 10.5px; line-height: 1.45;
+  }
+  .side-nav { display: grid; gap: 2px; }
+  .side-nav a {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--muted); text-decoration: none; font-size: 12px;
+    padding: 8px 10px; border-radius: 8px;
+  }
+  .side-nav a::before {
+    content: ""; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--line); transition: .18s ease;
+  }
+  .side-nav a:hover { color: var(--ink); background: var(--surface-2); }
+  .side-nav a:hover::before { background: var(--accent); }
+  .side-scope {
+    color: var(--muted); font-size: 11px; line-height: 1.6;
+    padding: 0 3px;
+  }
+  .side-scope strong { color: var(--ink); font-weight: 600; }
+  .main { min-width: 0; }
+
+  @media (max-width: 1000px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar { position: static; grid-template-columns: 1fr 1fr; }
+    .sidebar .side-nav, .sidebar .side-scope { display: none; }
+    .side-card { padding: 12px; }
+  }
+  @media (max-width: 600px) {
+    .sidebar { grid-template-columns: 1fr; }
+  }
 
   /* ---------- KPI ---------- */
   .kpi-grid {
@@ -356,7 +421,32 @@
     </div>
   </header>
 
-  <div class="context">
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="side-card">
+        <div class="side-title">全局筛选 <span>影响整页</span></div>
+        <div class="filter-field">
+          <label for="platformSelect">平台</label>
+          <select id="platformSelect"><option value="">全部平台</option></select>
+        </div>
+        <div class="filter-field">
+          <label for="modelSelect">模型</label>
+          <select id="modelSelect"><option value="">全部模型</option></select>
+        </div>
+        <button class="filter-reset" id="resetFilters">清除筛选</button>
+        <p class="side-hint">筛选会同步作用于 KPI、趋势、模型、对话与最近调用。</p>
+      </div>
+      <nav class="side-nav">
+        <a href="#overview">总览</a>
+        <a href="#trend">花费趋势</a>
+        <a href="#models">模型明细</a>
+        <a href="#conversations">对话排行</a>
+        <a href="#recent">最近调用</a>
+      </nav>
+      <div class="side-scope" id="sideScope">当前：全部平台 / 全部模型</div>
+    </aside>
+    <main class="main">
+      <div class="context" id="overview">
     <span><span class="dot"></span><strong id="periodLabel">近 7 天</strong></span>
     <span id="periodRange">正在加载…</span>
   </div>
@@ -397,7 +487,7 @@
   </section>
 
   <div class="dashboard">
-    <section class="card span-8">
+    <section class="card span-8" id="trend">
       <div class="card-head">
         <h2>每日花费趋势</h2>
         <span class="hint" id="trendHint">近 7 天</span>
@@ -423,7 +513,7 @@
       </div>
     </section>
 
-    <section class="card span-7">
+    <section class="card span-7" id="models">
       <div class="card-head">
         <h2>模型用量</h2>
         <span class="hint" id="modelHint">输入 / 缓存 / 输出</span>
@@ -443,7 +533,7 @@
       <div class="peak-foot" id="peakFoot">—</div>
     </section>
 
-    <section class="card span-12">
+    <section class="card span-12" id="conversations">
       <div class="card-head">
         <h2>对话排行</h2>
         <div class="seg" id="kindSeg">
@@ -451,11 +541,6 @@
           <button data-kind="private">私聊</button>
           <button data-kind="group">群聊</button>
         </div>
-      </div>
-      <div class="platform-filter">
-        <select id="platformFilter" aria-label="平台筛选">
-          <option value="all">全部平台</option>
-        </select>
       </div>
       <div class="table-wrap"><table>
         <thead><tr>
@@ -466,7 +551,7 @@
       </table></div>
     </section>
 
-    <section class="card span-12">
+    <section class="card span-12" id="recent">
       <div class="card-head">
         <h2>最近调用</h2>
         <span class="hint">最近 8 条</span>
@@ -476,6 +561,9 @@
         <tbody id="recentBody"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
       </table></div>
     </section>
+  </div>
+
+    </main>
   </div>
 
   <div class="footer">
@@ -672,26 +760,35 @@ function renderModels(models) {
 
 let CONVS = [];
 let KIND_FILTER = 'all';
-let PLATFORM_FILTER = 'all';
+let PLATFORM_FILTER = '';
+let MODEL_FILTER = '';
 
-function renderPlatformFilter(platforms) {
-  const select = $('platformFilter');
-  if (!select) return;
-  const options = ['<option value="all">全部平台</option>'].concat(
-    (platforms || []).map(p => `<option value="${esc(p.platform)}">${esc(p.label || p.platform)} (${p.requests})</option>`)
-  );
-  select.innerHTML = options.join('');
-  if (PLATFORM_FILTER !== 'all' && !(platforms || []).some(p => p.platform === PLATFORM_FILTER)) {
-    PLATFORM_FILTER = 'all';
+function renderFacets(facets) {
+  const platformSelect = $('platformSelect');
+  const modelSelect = $('modelSelect');
+  if (!platformSelect || !modelSelect) return;
+  const platforms = (facets && facets.platforms) || [];
+  const models = (facets && facets.models) || [];
+  platformSelect.innerHTML = '<option value="">全部平台</option>' +
+    platforms.map(p => `<option value="${esc(p.platform)}">${esc(p.label || p.platform)} (${p.requests})</option>`).join('');
+  modelSelect.innerHTML = '<option value="">全部模型</option>' +
+    models.map(m => `<option value="${esc(m.model)}">${esc(m.model)} (${m.requests})</option>`).join('');
+  if (PLATFORM_FILTER && !platforms.some(p => p.platform === PLATFORM_FILTER)) {
+    PLATFORM_FILTER = '';
   }
-  select.value = PLATFORM_FILTER;
+  if (MODEL_FILTER && !models.some(m => m.model === MODEL_FILTER)) {
+    MODEL_FILTER = '';
+  }
+  platformSelect.value = PLATFORM_FILTER;
+  modelSelect.value = MODEL_FILTER;
+  const pText = platformSelect.selectedOptions[0]?.textContent || '全部平台';
+  const mText = modelSelect.selectedOptions[0]?.textContent || '全部模型';
+  const scope = $('sideScope');
+  if (scope) scope.innerHTML = `当前：<strong>${esc(pText)}</strong> / <strong>${esc(mText)}</strong>`;
 }
 
 function renderConvs() {
-  const list = CONVS.filter(c =>
-    (KIND_FILTER === 'all' || c.kind === KIND_FILTER) &&
-    (PLATFORM_FILTER === 'all' || c.platform === PLATFORM_FILTER)
-  );
+  const list = CONVS.filter(c => KIND_FILTER === 'all' || c.kind === KIND_FILTER);
   if (!list.length) {
     $('convBody').innerHTML = '<tr><td colspan="8" class="empty">该时段没有记录</td></tr>';
     return;
@@ -750,6 +847,8 @@ async function load(days = 7, date = '') {
     const ctx = view.getContext && view.getContext();
     if (ctx) applyTheme(!!ctx.isDark);
     const params = CURRENT.date ? { date: CURRENT.date } : { days: CURRENT.days };
+    if (PLATFORM_FILTER) params.platform = PLATFORM_FILTER;
+    if (MODEL_FILTER) params.model = MODEL_FILTER;
     const d = await view.apiGet('/summary', params);
     if (seq !== loadSeq) return;
     const p = d.period || {}, o = d.overall || {};
@@ -788,7 +887,7 @@ async function load(days = 7, date = '') {
     renderModels(p.models || {});
 
     CONVS = p.conversations || [];
-    renderPlatformFilter(p.platforms || []);
+    renderFacets(p.facets || {});
     renderConvs();
     const labelMap = {};
     CONVS.forEach(c => { labelMap[c.umo] = c.label; });
@@ -851,9 +950,20 @@ $('kindSeg').addEventListener('click', (ev) => {
   renderConvs();
 });
 
-$('platformFilter').addEventListener('change', (ev) => {
+$('platformSelect').addEventListener('change', (ev) => {
   PLATFORM_FILTER = ev.target.value;
-  renderConvs();
+  load(CURRENT.days, CURRENT.date);
+});
+
+$('modelSelect').addEventListener('change', (ev) => {
+  MODEL_FILTER = ev.target.value;
+  load(CURRENT.days, CURRENT.date);
+});
+
+$('resetFilters').addEventListener('click', () => {
+  PLATFORM_FILTER = '';
+  MODEL_FILTER = '';
+  load(CURRENT.days, CURRENT.date);
 });
 
 window.addEventListener('resize', () => {
@@ -880,4 +990,5 @@ load(7, '');
 </script>
 </body>
 </html>
+
 

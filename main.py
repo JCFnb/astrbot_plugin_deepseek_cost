@@ -217,11 +217,20 @@ def _reply_counts() -> dict[str, int]:
     return result
 
 
-def _collect(days: int = 7, date_str: str | None = None) -> dict:
+def _collect(
+    days: int = 7,
+    date_str: str | None = None,
+    platform_filter: str | None = None,
+    model_filter: str | None = None,
+) -> dict:
     """统计指定自然日或最近 N 个自然日。
 
     单日模式严格从当天 00:00 到次日 00:00，不做滚动 24 小时。
+    platform_filter / model_filter 在时间范围基础上再筛选；facets 始终返回
+    当前时间范围内全部平台和模型，供页面筛选器使用。
     """
+    platform_filter = str(platform_filter or "").strip()
+    model_filter = str(model_filter or "").strip()
     now = datetime.now(BJ)
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     selected_date = ""
@@ -257,9 +266,24 @@ def _collect(days: int = 7, date_str: str | None = None) -> dict:
         k: {"requests": 0, "tokens": 0, "cost": 0.0} for k in KINDS
     }
     platforms: dict[str, dict] = {}
+    facet_platforms: dict[str, dict] = {}
+    facet_models: dict[str, dict] = {}
 
     for model, tin, tcached, tout, dt, umo in _iter_rows():
         if dt < start or (end is not None and dt >= end):
+            continue
+        platform, mtype, sid, kind, label, platform_label = _parse_umo(umo)
+        pf = facet_platforms.setdefault(platform, {
+            "platform": platform,
+            "label": platform_label,
+            "requests": 0,
+        })
+        pf["requests"] += 1
+        fm = facet_models.setdefault(model, {"model": model, "requests": 0})
+        fm["requests"] += 1
+        if platform_filter and platform != platform_filter:
+            continue
+        if model_filter and model != model_filter:
             continue
         p = _price_for(model, dt)
         c = (tin / 1_000_000) * p["miss"] + (tcached / 1_000_000) * p["cache"] + (tout / 1_000_000) * p["out"]
@@ -282,7 +306,6 @@ def _collect(days: int = 7, date_str: str | None = None) -> dict:
         m["cost"] += c
         day = dt.strftime("%Y-%m-%d")
         by_day[day] = by_day.get(day, 0.0) + c
-        platform, mtype, sid, kind, label, platform_label = _parse_umo(umo)
         recent.append({
             "time": dt.strftime("%m-%d %H:%M"),
             "model": model,
@@ -370,10 +393,17 @@ def _collect(days: int = 7, date_str: str | None = None) -> dict:
         platforms_out.append(p)
     platforms_out.sort(key=lambda x: x["cost"], reverse=True)
 
+    facets = {
+        "platforms": sorted(facet_platforms.values(), key=lambda x: -x["requests"]),
+        "models": sorted(facet_models.values(), key=lambda x: -x["requests"]),
+    }
+
     return {
         "days": days,
         "date": selected_date or None,
         "label": period_label,
+        "platform_filter": platform_filter,
+        "model_filter": model_filter,
         "start": start.strftime("%Y-%m-%d %H:%M"),
         "end": end.strftime("%Y-%m-%d %H:%M") if end else "现在",
         "requests": requests,
@@ -392,6 +422,7 @@ def _collect(days: int = 7, date_str: str | None = None) -> dict:
         "conversations": conv_list,
         "kinds": kinds_out,
         "platforms": platforms_out,
+        "facets": facets,
     }
 
 
@@ -444,15 +475,19 @@ class CostPlugin(Star):
 
     async def _summary_api(self):
         date_str = ""
+        platform = ""
+        model = ""
         try:
             from quart import request as qreq
 
             date_str = str(qreq.args.get("date", "") or "").strip()
+            platform = str(qreq.args.get("platform", "") or "").strip()
+            model = str(qreq.args.get("model", "") or "").strip()
             days = int(qreq.args.get("days", 7))
         except Exception:
             days = 7
         days = max(1, min(days, 90))
-        s = _collect(days, date_str or None)
+        s = _collect(days, date_str or None, platform or None, model or None)
         assistant = _assistant_count()
         total_cost = _all_time_cost()
         return {
