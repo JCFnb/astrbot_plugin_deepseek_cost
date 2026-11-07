@@ -1,8 +1,8 @@
-name: astrbot_plugin_cost
+﻿name: astrbot_plugin_cost
 display_name: AstrBot 用量与费用
 short_desc: 查看 AstrBot 各平台、各模型的 API 用量与花费，支持单日查询、对话排行与图表
-desc: 基于本地 provider_stats 统计 token 用量，支持 QQ、Telegram、Discord、飞书、WebChat 等 AstrBot 平台，以及 DeepSeek、OpenAI、Claude、Gemini、Qwen 等模型；按价目表估算费用，支持按自然日查看单日用量（今天从 00:00 起算）、平台/私聊/群聊拆分、对话排行榜、每日趋势、缓存命中率、模型明细和最近调用，并附带响应式 WebUI 仪表盘。
-version: 1.6.0
+desc: 基于本地 provider_stats 统计 token 用量，支持 QQ、Telegram、Discord、飞书、WebChat 等 AstrBot 平台，以及 DeepSeek、OpenAI、Claude、Gemini、Qwen 等模型；按价目表估算费用，支持按自然日查看单日用量（今天从 00:00 起算）、平台/私聊/群聊拆分、对话排行榜、每日趋势、缓存命中率、模型明细和最近调用，并附带响应式 WebUI 仪表盘和独立的毛玻璃模型价格参考页。
+version: 1.7.0
 author: JCFnb
 repo: https://github.com/JCFnb/astrbot_plugin_deepseek_cost
 astrbot_version: ">=4.24.0"
@@ -13,3 +13,4 @@ tags:
   - 多模型
   - WebUI
   - 数据可视化
+

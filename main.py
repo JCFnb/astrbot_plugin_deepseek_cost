@@ -479,8 +479,32 @@ class CostPlugin(Star):
                 ["GET"],
                 "API 用量与费用汇总",
             )
+            self.context.register_web_api(
+                "/astrbot_plugin_cost/prices",
+                self._prices_api,
+                ["GET"],
+                "模型参考价格",
+            )
         except Exception as exc:
             logger.warning(f"[cost] 注册 Web API 失败: {exc}")
+
+    async def _prices_api(self):
+        models = []
+        for name, table in PRICES.items():
+            models.append({
+                "model": name,
+                "unit": "CNY / 1M tokens",
+                "peak": table.get("peak", {}),
+                "idle": table.get("idle", {}),
+                "source": "参考价（估算）",
+            })
+        return {
+            "ok": True,
+            "updated": "2026-11-08",
+            "unit": "CNY / 1M tokens",
+            "note": "参考价仅用于本地估算，实际扣费以各模型服务商账单为准。",
+            "models": models,
+        }
 
     async def _summary_api(self):
         date_str = ""

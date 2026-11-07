@@ -1,4 +1,7 @@
 {
-  "metadata": { "display_name": "API 用量与费用" },
-  "views": { "cost": { "title": "API 用量与费用" } }
+  "metadata": { "display_name": "AstrBot 用量与费用" },
+  "views": {
+    "cost": { "title": "API 用量与费用" },
+    "models": { "title": "模型价格参考" }
+  }
 }
