@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DeepSeek 用量仪表盘</title>
+<title>AstrBot 用量仪表盘</title>
 <script src="/api/plugin/page/bridge-sdk.js"></script>
 <style>
   :root {
@@ -287,6 +287,11 @@
   .kind-tag.private { color: var(--accent); background: rgba(59, 110, 246, .10); }
   .kind-tag.group { color: #b06a00; background: rgba(245, 158, 11, .14); }
   .kind-tag.other { color: var(--muted); background: var(--surface-3); }
+  .platform-filter select {
+    border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px;
+    background: var(--surface-2); color: var(--ink); font: inherit; font-size: 11.5px;
+    max-width: 180px;
+  }
   .share-cell { display: inline-flex; align-items: center; gap: 7px; justify-content: flex-end; }
   .share-track { width: 48px; height: 4px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
   .share-track > i { display: block; height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .7s ease; }
@@ -330,10 +335,10 @@
 <div class="app">
   <header class="topbar">
     <div class="brand">
-      <div class="logo">DS</div>
+      <div class="logo">API</div>
       <div>
-        <h1>DeepSeek 用量仪表盘</h1>
-        <p>本地 provider_stats · 官方价目估算 · 高峰 / 空闲分价</p>
+        <h1>AstrBot 用量仪表盘</h1>
+        <p>多平台 · 多模型 · 本地 provider_stats · 参考价估算</p>
       </div>
     </div>
     <div class="controls">
@@ -447,6 +452,11 @@
           <button data-kind="group">群聊</button>
         </div>
       </div>
+      <div class="platform-filter">
+        <select id="platformFilter" aria-label="平台筛选">
+          <option value="all">全部平台</option>
+        </select>
+      </div>
       <div class="table-wrap"><table>
         <thead><tr>
           <th style="width:36px">#</th><th>对话</th><th class="hide-sm">调用</th><th class="hide-sm">tokens</th>
@@ -470,7 +480,7 @@
 
   <div class="footer">
     <span>数据来源：AstrBot provider_stats（本地）</span>
-    <span>估算值，实际扣费以 DeepSeek 控制台账单为准</span>
+    <span>估算值，实际扣费以各模型服务商账单为准</span>
   </div>
 </div>
 
@@ -662,9 +672,26 @@ function renderModels(models) {
 
 let CONVS = [];
 let KIND_FILTER = 'all';
+let PLATFORM_FILTER = 'all';
+
+function renderPlatformFilter(platforms) {
+  const select = $('platformFilter');
+  if (!select) return;
+  const options = ['<option value="all">全部平台</option>'].concat(
+    (platforms || []).map(p => `<option value="${esc(p.platform)}">${esc(p.label || p.platform)} (${p.requests})</option>`)
+  );
+  select.innerHTML = options.join('');
+  if (PLATFORM_FILTER !== 'all' && !(platforms || []).some(p => p.platform === PLATFORM_FILTER)) {
+    PLATFORM_FILTER = 'all';
+  }
+  select.value = PLATFORM_FILTER;
+}
 
 function renderConvs() {
-  const list = CONVS.filter(c => KIND_FILTER === 'all' || c.kind === KIND_FILTER);
+  const list = CONVS.filter(c =>
+    (KIND_FILTER === 'all' || c.kind === KIND_FILTER) &&
+    (PLATFORM_FILTER === 'all' || c.platform === PLATFORM_FILTER)
+  );
   if (!list.length) {
     $('convBody').innerHTML = '<tr><td colspan="8" class="empty">该时段没有记录</td></tr>';
     return;
@@ -761,6 +788,7 @@ async function load(days = 7, date = '') {
     renderModels(p.models || {});
 
     CONVS = p.conversations || [];
+    renderPlatformFilter(p.platforms || []);
     renderConvs();
     const labelMap = {};
     CONVS.forEach(c => { labelMap[c.umo] = c.label; });
@@ -823,6 +851,11 @@ $('kindSeg').addEventListener('click', (ev) => {
   renderConvs();
 });
 
+$('platformFilter').addEventListener('change', (ev) => {
+  PLATFORM_FILTER = ev.target.value;
+  renderConvs();
+});
+
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => load(CURRENT.days, CURRENT.date), 200);
@@ -847,3 +880,4 @@ load(7, '');
 </script>
 </body>
 </html>
+

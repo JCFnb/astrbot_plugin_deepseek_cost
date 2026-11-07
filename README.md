@@ -1,13 +1,14 @@
-# astrbot_plugin_deepseek_cost
+# astrbot_plugin_cost
 
-AstrBot 的 **DeepSeek API 用量与费用** 插件（只针对 DeepSeek）。统计 AstrBot 侧每次模型调用的 token 用量，按 DeepSeek 官方价目表估算花费，并提供一个带图表的 WebUI 仪表盘。
+AstrBot 的 **API 用量与费用** 插件。统计 AstrBot 侧每次模型调用的 token 用量，支持多平台、多模型查看，并按价目表估算花费，附带 WebUI 仪表盘。
 
-## 支持平台
+## 支持范围
 
-**仅支持 QQ（OneBot v11 / `aiocqhttp`）。**
+- **平台**：QQ（OneBot v11 / `aiocqhttp` / SnowLuma）、WebChat、Telegram、Discord、飞书、企业微信、KOOK 等 AstrBot 已接入平台；
+- **模型**：DeepSeek、OpenAI、Claude、Gemini、Qwen 等；模型明细会列出所有出现过的 provider_model；
+- 平台会话类型根据 UMO 自动识别为私聊、群聊或其他会话。
 
-私聊/群聊的识别依赖 aiocqhttp 的消息类型（`FriendMessage` / `GroupMessage`），其他平台（Telegram、Discord、飞书等）未做适配。
-
+> 费用为本地估算。非 DeepSeek 模型使用内置参考价，实际账单以各模型服务商为准；未匹配价格的模型仍会统计 tokens。
 
 ## 功能
 
@@ -17,11 +18,11 @@ AstrBot 的 **DeepSeek API 用量与费用** 插件（只针对 DeepSeek）。�
   - 支持按日期查看单日用量，单日严格统计当天 00:00–24:00，不按滚动 24 小时计算
   - “今天”按钮从今天 00:00 起算
   - 请求次数、回复消息数、时段花费、平均每条回复、平均每次请求、缓存命中率
-  - **私聊 / 群聊花费拆分**（环形图 + 明细）
-  - **对话排行榜**：每个对话的调用次数、tokens、命中率、费用、每次均价、占比，可筛选私聊/群聊
+  - **平台筛选**与**私聊 / 群聊花费拆分**（环形图 + 明细）
+  - **对话排行榜**：每个对话的调用次数、tokens、命中率、费用、每次均价、占比，可筛选平台/私聊/群聊
   - 每日花费趋势折线图
   - 高峰 / 空闲分布
-  - 模型明细、最近调用
+  - 多模型明细、最近调用
   - 时间范围工具栏、移动端横向滚动表格与响应式布局
 - 自动区分 DeepSeek **高峰 / 空闲时段** 价格
 - 深浅色主题、动画与骨架屏
@@ -45,22 +46,16 @@ AstrBot 的 **DeepSeek API 用量与费用** 插件（只针对 DeepSeek）。�
 /用量 7        # 最近 7 个自然日（含今天）
 ```
 
-WebUI：`插件` → `DeepSeek 用量与费用` → 打开 `cost` 页面。  
+WebUI：`插件` → `AstrBot 用量与费用` → 打开 `cost` 页面。  
 页面右上角可按日期选择单日查看；单日范围是当天 `00:00–24:00`。
 
 ## 数据与价格
 
 - 数据来源：AstrBot 本地数据库 `data_v4.db` 中的 `provider_stats` 表（仅统计 `status='completed'` 的调用）。
-- 私聊/群聊与对话标识来自 `provider_stats.umo`，回复数来自 `conversations` 表中的 assistant 消息。
-- 价格写在 `main.py` 顶部的 `PRICES` 中，单位：**元 / 百万 tokens**：
-
-| 模型 | 缓存命中（高峰/空闲） | 缓存未命中（高峰/空闲） | 输出（高峰/空闲） |
-|---|---|---|---|
-| deepseek-flash | 0.04 / 0.02 | 2.0 / 1.0 | 8.0 / 4.0 |
-| deepseek-v4-pro | 0.30 / 0.15 | 9.0 / 4.5 | 27.0 / 13.5 |
-
-- 高峰时段：北京时间 **周一至周五 9:00–12:00、14:00–18:00**（不含法定节假日）；其余按空闲价。
-- 价格来自 [DeepSeek 官方价目表](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)，官方调价时请同步修改 `PRICES`。
+- 平台、私聊/群聊与对话标识来自 `provider_stats.umo`，回复数来自 `conversations` 表中的 assistant 消息。
+- 价格写在 `main.py` 顶部的 `PRICES` 中，单位：**元 / 百万 tokens**。当前包含 DeepSeek、OpenAI、Claude、Gemini、Qwen 的参考价；模型名按精确名和包含关系匹配。
+- 高峰时段：北京时间 **周一至周五 9:00–12:00、14:00–18:00**（不含法定节假日）；非 DeepSeek 模型通常使用固定参考价。
+- DeepSeek 价格来自 [DeepSeek 官方价目表](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)；其他模型价格为估算参考，官方调价时请同步修改 `PRICES`。
 
 ## 配置
 
@@ -74,7 +69,7 @@ WebUI：`插件` → `DeepSeek 用量与费用` → 打开 `cost` 页面。
 
 ## 说明
 
-- 统计与费用为**本地估算**，实际扣费以 DeepSeek 控制台账单为准；
+- 统计与费用为**本地估算**，实际扣费以对应模型服务商账单为准；
 - 只统计 AstrBot 通过 provider 产生的调用，不包含其他程序使用同一 API Key 的消耗；
 - 对话回复数来自会话历史（全量），费用/tokens 为所选时间范围内。
 

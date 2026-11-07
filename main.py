@@ -49,6 +49,66 @@ PRICES = {
         "peak": {"cache": 0.30, "miss": 9.0, "out": 27.0},
         "idle": {"cache": 0.15, "miss": 4.5, "out": 13.5},
     },
+    "deepseek-chat": {
+        "peak": {"cache": 0.04, "miss": 2.0, "out": 8.0},
+        "idle": {"cache": 0.02, "miss": 1.0, "out": 4.0},
+    },
+    "deepseek-reasoner": {
+        "peak": {"cache": 0.04, "miss": 4.0, "out": 16.0},
+        "idle": {"cache": 0.02, "miss": 2.0, "out": 8.0},
+    },
+    "gpt-4o": {
+        "peak": {"cache": 1.25, "miss": 2.50, "out": 10.0},
+        "idle": {"cache": 1.25, "miss": 2.50, "out": 10.0},
+    },
+    "gpt-4o-mini": {
+        "peak": {"cache": 0.075, "miss": 0.15, "out": 0.60},
+        "idle": {"cache": 0.075, "miss": 0.15, "out": 0.60},
+    },
+    "gpt-4.1": {
+        "peak": {"cache": 0.50, "miss": 2.00, "out": 8.00},
+        "idle": {"cache": 0.50, "miss": 2.00, "out": 8.00},
+    },
+    "o3": {
+        "peak": {"cache": 0.50, "miss": 2.00, "out": 8.00},
+        "idle": {"cache": 0.50, "miss": 2.00, "out": 8.00},
+    },
+    "o4-mini": {
+        "peak": {"cache": 0.275, "miss": 1.10, "out": 4.40},
+        "idle": {"cache": 0.275, "miss": 1.10, "out": 4.40},
+    },
+    "claude-3-5-sonnet": {
+        "peak": {"cache": 0.30, "miss": 3.00, "out": 15.0},
+        "idle": {"cache": 0.30, "miss": 3.00, "out": 15.0},
+    },
+    "claude-3-7-sonnet": {
+        "peak": {"cache": 0.30, "miss": 3.00, "out": 15.0},
+        "idle": {"cache": 0.30, "miss": 3.00, "out": 15.0},
+    },
+    "claude-sonnet-4": {
+        "peak": {"cache": 0.30, "miss": 3.00, "out": 15.0},
+        "idle": {"cache": 0.30, "miss": 3.00, "out": 15.0},
+    },
+    "gemini-2.5-flash": {
+        "peak": {"cache": 0.03, "miss": 0.30, "out": 2.50},
+        "idle": {"cache": 0.03, "miss": 0.30, "out": 2.50},
+    },
+    "gemini-2.5-pro": {
+        "peak": {"cache": 0.125, "miss": 1.25, "out": 10.0},
+        "idle": {"cache": 0.125, "miss": 1.25, "out": 10.0},
+    },
+    "qwen-plus": {
+        "peak": {"cache": 0.10, "miss": 0.80, "out": 2.00},
+        "idle": {"cache": 0.10, "miss": 0.80, "out": 2.00},
+    },
+    "qwen-max": {
+        "peak": {"cache": 0.30, "miss": 2.40, "out": 9.60},
+        "idle": {"cache": 0.30, "miss": 2.40, "out": 9.60},
+    },
+    "qwen-turbo": {
+        "peak": {"cache": 0.05, "miss": 0.30, "out": 0.60},
+        "idle": {"cache": 0.05, "miss": 0.30, "out": 0.60},
+    },
 }
 DEFAULT_PRICE = PRICES["deepseek-flash"]
 
@@ -61,7 +121,15 @@ def _is_peak(dt: datetime) -> bool:
 
 
 def _price_for(model: str, dt: datetime) -> dict:
-    table = PRICES.get(model or "", DEFAULT_PRICE)
+    raw = str(model or "").strip().lower()
+    key = raw.split("/")[-1]
+    table = PRICES.get(key)
+    if table is None:
+        for name in sorted(PRICES, key=len, reverse=True):
+            if name in key:
+                table = PRICES[name]
+                break
+    table = table or DEFAULT_PRICE
     return table["peak"] if _is_peak(dt) else table["idle"]
 
 
@@ -73,22 +141,47 @@ def _fmt_tokens(n: int) -> str:
     return str(n)
 
 
-def _parse_umo(umo: str) -> tuple[str, str, str, str, str]:
+PLATFORM_LABELS = {
+    "aiocqhttp": "QQ",
+    "snowluma": "QQ / SnowLuma",
+    "qq": "QQ",
+    "webchat": "WebChat",
+    "telegram": "Telegram",
+    "discord": "Discord",
+    "slack": "Slack",
+    "lark": "飞书",
+    "feishu": "飞书",
+    "wecom": "企业微信",
+    "wechat": "微信",
+    "dingtalk": "钉钉",
+    "kook": "KOOK",
+    "mattermost": "Mattermost",
+    "matrix": "Matrix",
+    "misskey": "Misskey",
+}
+
+
+def _parse_umo(umo: str) -> tuple[str, str, str, str, str, str]:
     parts = str(umo or "").split(":")
     platform = parts[0] if len(parts) > 0 else "unknown"
     mtype = parts[1] if len(parts) > 1 else ""
     sid = parts[2] if len(parts) > 2 else ""
     low = mtype.lower()
-    if "group" in low:
+    if any(token in low for token in ("group", "channel", "guild", "room")):
         kind = "group"
-        label = f"群聊 {sid}"
-    elif "friend" in low or "private" in low:
+        kind_label = "群聊"
+    elif any(token in low for token in ("friend", "private", "direct", "dm", "c2c")):
         kind = "private"
-        label = f"私聊 {sid}"
+        kind_label = "私聊"
     else:
         kind = "other"
-        label = f"{platform} {sid}"
-    return platform, mtype, sid, kind, label
+        kind_label = "会话"
+    platform_label = PLATFORM_LABELS.get(platform.lower(), platform or "未知平台")
+    label = f"{platform_label} · {kind_label}"
+    if sid:
+        label += f" {sid}"
+    return platform, mtype, sid, kind, label, platform_label
+
 
 
 def _iter_rows():
@@ -163,6 +256,7 @@ def _collect(days: int = 7, date_str: str | None = None) -> dict:
     kinds: dict[str, dict] = {
         k: {"requests": 0, "tokens": 0, "cost": 0.0} for k in KINDS
     }
+    platforms: dict[str, dict] = {}
 
     for model, tin, tcached, tout, dt, umo in _iter_rows():
         if dt < start or (end is not None and dt >= end):
@@ -188,6 +282,7 @@ def _collect(days: int = 7, date_str: str | None = None) -> dict:
         m["cost"] += c
         day = dt.strftime("%Y-%m-%d")
         by_day[day] = by_day.get(day, 0.0) + c
+        platform, mtype, sid, kind, label, platform_label = _parse_umo(umo)
         recent.append({
             "time": dt.strftime("%m-%d %H:%M"),
             "model": model,
@@ -196,12 +291,13 @@ def _collect(days: int = 7, date_str: str | None = None) -> dict:
             "output": tout,
             "cost": round(c, 4),
             "umo": umo,
+            "platform": platform,
         })
 
-        platform, mtype, sid, kind, label = _parse_umo(umo)
         conv = convs.setdefault(umo, {
             "umo": umo,
             "platform": platform,
+            "platform_label": platform_label,
             "kind": kind,
             "label": label,
             "requests": 0,
@@ -218,6 +314,17 @@ def _collect(days: int = 7, date_str: str | None = None) -> dict:
         conv["output"] += tout
         conv["tokens"] += tokens
         conv["cost"] += c
+
+        pf = platforms.setdefault(platform, {
+            "platform": platform,
+            "label": platform_label,
+            "requests": 0,
+            "tokens": 0,
+            "cost": 0.0,
+        })
+        pf["requests"] += 1
+        pf["tokens"] += tokens
+        pf["cost"] += c
 
         k = kinds[kind]
         k["requests"] += 1
@@ -256,6 +363,12 @@ def _collect(days: int = 7, date_str: str | None = None) -> dict:
             "cost": round(v["cost"], 4),
             "share": round(v["cost"] / cost * 100, 1) if cost else 0,
         }
+    platforms_out = []
+    for p in platforms.values():
+        p["cost"] = round(p["cost"], 4)
+        p["share"] = round(p["cost"] / cost * 100, 1) if cost else 0
+        platforms_out.append(p)
+    platforms_out.sort(key=lambda x: x["cost"], reverse=True)
 
     return {
         "days": days,
@@ -278,6 +391,7 @@ def _collect(days: int = 7, date_str: str | None = None) -> dict:
         "recent": recent[:8],
         "conversations": conv_list,
         "kinds": kinds_out,
+        "platforms": platforms_out,
     }
 
 
