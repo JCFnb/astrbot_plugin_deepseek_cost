@@ -49,68 +49,35 @@ PRICES = {
         "peak": {"cache": 0.30, "miss": 9.0, "out": 27.0},
         "idle": {"cache": 0.15, "miss": 4.5, "out": 13.5},
     },
-    "deepseek-chat": {
-        "peak": {"cache": 0.04, "miss": 2.0, "out": 8.0},
-        "idle": {"cache": 0.02, "miss": 1.0, "out": 4.0},
-    },
-    "deepseek-reasoner": {
-        "peak": {"cache": 0.04, "miss": 4.0, "out": 16.0},
-        "idle": {"cache": 0.02, "miss": 2.0, "out": 8.0},
-    },
-    "gpt-4o": {
-        "peak": {"cache": 1.25, "miss": 2.50, "out": 10.0},
-        "idle": {"cache": 1.25, "miss": 2.50, "out": 10.0},
-    },
-    "gpt-4o-mini": {
-        "peak": {"cache": 0.075, "miss": 0.15, "out": 0.60},
-        "idle": {"cache": 0.075, "miss": 0.15, "out": 0.60},
-    },
-    "gpt-4.1": {
-        "peak": {"cache": 0.50, "miss": 2.00, "out": 8.00},
-        "idle": {"cache": 0.50, "miss": 2.00, "out": 8.00},
-    },
-    "o3": {
-        "peak": {"cache": 0.50, "miss": 2.00, "out": 8.00},
-        "idle": {"cache": 0.50, "miss": 2.00, "out": 8.00},
-    },
-    "o4-mini": {
-        "peak": {"cache": 0.275, "miss": 1.10, "out": 4.40},
-        "idle": {"cache": 0.275, "miss": 1.10, "out": 4.40},
-    },
-    "claude-3-5-sonnet": {
-        "peak": {"cache": 0.30, "miss": 3.00, "out": 15.0},
-        "idle": {"cache": 0.30, "miss": 3.00, "out": 15.0},
-    },
-    "claude-3-7-sonnet": {
-        "peak": {"cache": 0.30, "miss": 3.00, "out": 15.0},
-        "idle": {"cache": 0.30, "miss": 3.00, "out": 15.0},
-    },
-    "claude-sonnet-4": {
-        "peak": {"cache": 0.30, "miss": 3.00, "out": 15.0},
-        "idle": {"cache": 0.30, "miss": 3.00, "out": 15.0},
-    },
-    "gemini-2.5-flash": {
-        "peak": {"cache": 0.03, "miss": 0.30, "out": 2.50},
-        "idle": {"cache": 0.03, "miss": 0.30, "out": 2.50},
-    },
-    "gemini-2.5-pro": {
-        "peak": {"cache": 0.125, "miss": 1.25, "out": 10.0},
-        "idle": {"cache": 0.125, "miss": 1.25, "out": 10.0},
-    },
-    "qwen-plus": {
-        "peak": {"cache": 0.10, "miss": 0.80, "out": 2.00},
-        "idle": {"cache": 0.10, "miss": 0.80, "out": 2.00},
-    },
-    "qwen-max": {
-        "peak": {"cache": 0.30, "miss": 2.40, "out": 9.60},
-        "idle": {"cache": 0.30, "miss": 2.40, "out": 9.60},
-    },
-    "qwen-turbo": {
-        "peak": {"cache": 0.05, "miss": 0.30, "out": 0.60},
-        "idle": {"cache": 0.05, "miss": 0.30, "out": 0.60},
-    },
 }
 DEFAULT_PRICE = PRICES["deepseek-flash"]
+PRICE_OVERRIDE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "plugin_data"
+    / "astrbot_plugin_cost"
+    / "prices_override.json"
+)
+
+
+def _load_price_overrides() -> dict:
+    try:
+        if PRICE_OVERRIDE_PATH.is_file():
+            data = json.loads(PRICE_OVERRIDE_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except Exception as exc:
+        logger.warning(f"[cost] 读取自定义价格失败: {exc}")
+    return {}
+
+
+def _save_price_overrides(data: dict) -> None:
+    PRICE_OVERRIDE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PRICE_OVERRIDE_PATH.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+PRICE_OVERRIDES = _load_price_overrides()
 
 
 def _is_peak(dt: datetime) -> bool:
@@ -123,15 +90,20 @@ def _is_peak(dt: datetime) -> bool:
 def _price_for(model: str, dt: datetime) -> tuple[dict | None, bool]:
     raw = str(model or "").strip().lower()
     key = raw.split("/")[-1]
-    table = PRICES.get(key)
-    if table is None:
-        for name in sorted(PRICES, key=len, reverse=True):
-            if name in key:
-                table = PRICES[name]
-                break
+    table = PRICE_OVERRIDES.get(raw) or PRICE_OVERRIDES.get(key)
+    if table is None and (raw.startswith("deepseek") or key.startswith("deepseek")):
+        table = PRICES.get(key)
+        if table is None:
+            for name in sorted(PRICES, key=len, reverse=True):
+                if name.startswith("deepseek") and name in key:
+                    table = PRICES[name]
+                    break
     if table is None:
         return None, False
-    return (table["peak"] if _is_peak(dt) else table["idle"]), True
+    rate = table.get("peak") if _is_peak(dt) else table.get("idle")
+    if not isinstance(rate, dict):
+        rate = table.get("peak") or table.get("idle") or {}
+    return rate, True
 
 
 def _fmt_tokens(n: int) -> str:
@@ -218,6 +190,43 @@ def _reply_counts() -> dict[str, int]:
     return result
 
 
+def _reply_count_between(start: datetime, end: datetime | None = None, platform_filter: str = "") -> int:
+    """统计指定时间范围内的机器人回复数量。"""
+    try:
+        con = sqlite3.connect(DB_PATH)
+        cur = con.cursor()
+        end_s = (end or datetime.now(BJ)).strftime("%Y-%m-%d %H:%M:%S")
+        sql = "select count(*) from platform_message_history where sender_id='bot' and created_at >= ? and created_at < ?"
+        params = [start.strftime("%Y-%m-%d %H:%M:%S"), end_s]
+        if platform_filter:
+            sql += " and platform_id=?"
+            params.append(platform_filter)
+        count = cur.execute(sql, params).fetchone()[0]
+        con.close()
+        return int(count or 0)
+    except Exception:
+        return 0
+
+
+def _estimate_replies(start: datetime, end: datetime | None, platform_filter: str = "") -> int:
+    """消息历史缺失时，按会话调用占比估算回复数。"""
+    all_calls: dict[str, int] = {}
+    period_calls: dict[str, int] = {}
+    end_dt = end or datetime.now(BJ)
+    for _model, _tin, _tcached, _tout, dt, umo in _iter_rows():
+        if platform_filter and not str(umo).startswith(platform_filter + ":"):
+            continue
+        all_calls[umo] = all_calls.get(umo, 0) + 1
+        if start <= dt < end_dt:
+            period_calls[umo] = period_calls.get(umo, 0) + 1
+    total = 0.0
+    for umo, count in _reply_counts().items():
+        if not all_calls.get(umo):
+            continue
+        total += count * period_calls.get(umo, 0) / all_calls[umo]
+    return int(round(total))
+
+
 def _collect(
     days: int = 7,
     date_str: str | None = None,
@@ -253,15 +262,21 @@ def _collect(
         days = 1
         period_label = "今天" if selected_date == today.strftime("%Y-%m-%d") else selected_date
 
+    hourly = bool(selected_date) or days == 1
     requests = 0
     total_in = total_cache = total_out = 0
     cost = 0.0
-    peak_cost = idle_cost = 0.0
-    peak_tokens = idle_tokens = 0
+    peak_cost = idle_cost = standard_cost = 0.0
+    peak_tokens = idle_tokens = standard_tokens = 0
     by_model: dict[str, dict] = {}
     by_day: dict[str, float] = {}
+    by_day_requests: dict[str, int] = {}
+    by_day_tokens: dict[str, int] = {}
+    bucket_map: dict[str, dict] = {}
+    hourly_map: dict[str, dict] = {}
     recent: list[dict] = []
     replies_map = _reply_counts()
+    period_replies_history = _reply_count_between(start, end, platform_filter)
     convs: dict[str, dict] = {}
     kinds: dict[str, dict] = {
         k: {"requests": 0, "tokens": 0, "cost": 0.0} for k in KINDS
@@ -297,13 +312,33 @@ def _collect(
         total_cache += tcached
         total_out += tout
         tokens = tin + tcached + tout
-        if _is_peak(dt):
-            peak_cost += c
-            peak_tokens += tokens
+        bucket_dt = dt.replace(minute=0, second=0, microsecond=0) if hourly else dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        bucket_key = bucket_dt.strftime("%Y-%m-%d %H:%M") if hourly else bucket_dt.strftime("%Y-%m-%d")
+        bucket = bucket_map.setdefault(bucket_key, {"key": bucket_key, "dt": bucket_dt, "cost": 0.0, "requests": 0, "tokens": 0, "models": {}})
+        bucket["cost"] += c
+        bucket["requests"] += 1
+        bucket["tokens"] += tokens
+        bm = bucket["models"].setdefault(model, {"requests": 0, "tokens": 0, "cost": 0.0})
+        bm["requests"] += 1
+        bm["tokens"] += tokens
+        bm["cost"] += c
+        hkey = dt.strftime("%Y-%m-%d %H")
+        hb = hourly_map.setdefault(hkey, {"dt": dt.replace(minute=0, second=0, microsecond=0), "cost": 0.0, "requests": 0, "tokens": 0})
+        hb["cost"] += c
+        hb["requests"] += 1
+        hb["tokens"] += tokens
+        if str(model or "").lower().startswith("deepseek"):
+            if _is_peak(dt):
+                peak_cost += c
+                peak_tokens += tokens
+            else:
+                idle_cost += c
+                idle_tokens += tokens
         else:
-            idle_cost += c
-            idle_tokens += tokens
-        m = by_model.setdefault(model, {"input": 0, "cache": 0, "output": 0, "cost": 0.0, "priced": priced})
+            standard_cost += c
+            standard_tokens += tokens
+        m = by_model.setdefault(model, {"requests": 0, "input": 0, "cache": 0, "output": 0, "cost": 0.0, "priced": priced})
+        m["requests"] += 1
         m["input"] += tin
         m["cache"] += tcached
         m["output"] += tout
@@ -311,6 +346,8 @@ def _collect(
         m["priced"] = bool(m.get("priced", True) and priced)
         day = dt.strftime("%Y-%m-%d")
         by_day[day] = by_day.get(day, 0.0) + c
+        by_day_requests[day] = by_day_requests.get(day, 0) + 1
+        by_day_tokens[day] = by_day_tokens.get(day, 0) + tokens
         recent.append({
             "time": dt.strftime("%m-%d %H:%M"),
             "model": model,
@@ -361,14 +398,50 @@ def _collect(
         k["cost"] += c
 
     series = []
-    for i in range(days):
-        d = (start + timedelta(days=i)).strftime("%Y-%m-%d")
-        series.append({
-            "day": d[5:],
-            "date": d,
-            "cost": round(by_day.get(d, 0.0), 4),
-        })
+    if hourly:
+        for i in range(24):
+            hdt = start + timedelta(hours=i)
+            key = hdt.strftime("%Y-%m-%d %H:%M")
+            b = bucket_map.get(key, {"cost": 0.0, "requests": 0, "tokens": 0, "models": {}})
+            series.append({
+                "key": key,
+                "day": hdt.strftime("%H:00"),
+                "date": hdt.strftime("%Y-%m-%d"),
+                "hour": hdt.hour,
+                "label": hdt.strftime("%H:00"),
+                "cost": round(b["cost"], 4),
+                "requests": b["requests"],
+                "tokens": b["tokens"],
+                "models": b["models"],
+            })
+    else:
+        for i in range(days):
+            ddt = start + timedelta(days=i)
+            key = ddt.strftime("%Y-%m-%d")
+            b = bucket_map.get(key, {"cost": 0.0, "requests": 0, "tokens": 0, "models": {}})
+            hours = []
+            for h in range(24):
+                hkey = (ddt + timedelta(hours=h)).strftime("%Y-%m-%d %H")
+                hb = hourly_map.get(hkey, {"cost": 0.0, "requests": 0, "tokens": 0})
+                hours.append({"hour": h, "label": f"{h:02d}:00", "cost": round(hb["cost"], 4), "requests": hb["requests"], "tokens": hb["tokens"]})
+            series.append({
+                "key": key,
+                "day": ddt.strftime("%m-%d"),
+                "date": key,
+                "hour": None,
+                "label": ddt.strftime("%m-%d"),
+                "cost": round(b["cost"], 4),
+                "requests": b["requests"],
+                "tokens": b["tokens"],
+                "models": b["models"],
+                "hours": hours,
+            })
 
+    # 部分平台不写入 platform_message_history，历史不足时按会话调用占比估算。
+    replies_estimated = period_replies_history < requests * 0.5
+    period_replies = period_replies_history if not replies_estimated else _estimate_replies(start, end, platform_filter)
+    if not period_replies:
+        period_replies = requests if requests else 0
     recent.sort(key=lambda x: x["time"], reverse=True)
     total_tokens = total_in + total_cache + total_out
 
@@ -418,13 +491,20 @@ def _collect(
         "output": total_out,
         "tokens": total_tokens,
         "cost": round(cost, 4),
+        "assistant_messages": period_replies,
+        "replies_estimated": replies_estimated,
         "avg_request": round(cost / requests, 4) if requests else 0,
+        "avg_per_reply": round(cost / period_replies, 4) if period_replies else 0,
         "cache_rate": round(total_cache / total_tokens * 100, 1) if total_tokens else 0,
         "peak": {"cost": round(peak_cost, 4), "tokens": peak_tokens},
         "idle": {"cost": round(idle_cost, 4), "tokens": idle_tokens},
+        "standard": {"cost": round(standard_cost, 4), "tokens": standard_tokens},
         "models": by_model,
         "series": series,
-        "recent": recent[:8],
+        "buckets": series,
+        "hourly": hourly,
+        "recent": recent,
+        "recent_total": len(recent),
         "conversations": conv_list,
         "kinds": kinds_out,
         "platforms": platforms_out,
@@ -482,21 +562,66 @@ class CostPlugin(Star):
             self.context.register_web_api(
                 "/astrbot_plugin_cost/prices",
                 self._prices_api,
-                ["GET"],
+                ["GET", "POST"],
                 "模型参考价格",
             )
         except Exception as exc:
             logger.warning(f"[cost] 注册 Web API 失败: {exc}")
 
     async def _prices_api(self):
+        from quart import request as qreq
+
+        if qreq.method == "POST":
+            try:
+                body = await qreq.get_json(silent=True) or {}
+            except Exception:
+                body = {}
+            if body.get("reset"):
+                PRICE_OVERRIDES.clear()
+                _save_price_overrides(PRICE_OVERRIDES)
+            else:
+                raw_models = body.get("models")
+                if not isinstance(raw_models, dict):
+                    return {"ok": False, "error": "models 必须是对象"}
+                cleaned = {}
+                for name, table in raw_models.items():
+                    model_name = str(name or "").strip()
+                    if not model_name or not isinstance(table, dict):
+                        continue
+                    peak = table.get("peak") if isinstance(table.get("peak"), dict) else table
+                    idle = table.get("idle") if isinstance(table.get("idle"), dict) else table
+                    def rates(src):
+                        out = {}
+                        for key in ("cache", "miss", "out"):
+                            try:
+                                value = float(src.get(key, 0) or 0)
+                            except (TypeError, ValueError):
+                                value = 0
+                            out[key] = max(0.0, round(value, 6))
+                        return out
+                    cleaned[model_name.lower()] = {
+                        "peak": rates(peak),
+                        "idle": rates(idle),
+                    }
+                PRICE_OVERRIDES.clear()
+                PRICE_OVERRIDES.update(cleaned)
+                _save_price_overrides(PRICE_OVERRIDES)
+
         models = []
-        for name, table in PRICES.items():
+        names = [name for name in PRICES if name.lower().startswith("deepseek")]
+        for name in PRICE_OVERRIDES:
+            if name not in names:
+                names.append(name)
+        for name in names:
+            custom = name.lower() in PRICE_OVERRIDES
+            table = PRICE_OVERRIDES.get(name.lower()) or PRICES.get(name) or DEFAULT_PRICE
             models.append({
                 "model": name,
                 "unit": "CNY / 1M tokens",
                 "peak": table.get("peak", {}),
                 "idle": table.get("idle", {}),
-                "source": "参考价（估算）",
+                "source": "自定义参考价" if custom else "内置参考价（估算）",
+                "custom": custom,
             })
         return {
             "ok": True,
@@ -505,6 +630,7 @@ class CostPlugin(Star):
             "note": "参考价仅用于本地估算，实际扣费以各模型服务商账单为准。",
             "models": models,
         }
+
 
     async def _summary_api(self):
         date_str = ""
