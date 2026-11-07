@@ -8,7 +8,7 @@ AstrBot 的 **API 用量与费用** 插件。统计 AstrBot 侧每次模型调�
 - **模型**：DeepSeek、OpenAI、Claude、Gemini、Qwen 等；模型明细会列出所有出现过的 provider_model；
 - 平台会话类型根据 UMO 自动识别为私聊、群聊或其他会话。
 
-> 费用为本地估算。非 DeepSeek 模型使用内置参考价，实际账单以各模型服务商为准；未匹配价格的模型仍会统计 tokens。
+> 费用为本地估算。非 DeepSeek 模型使用内置参考价，实际账单以各模型服务商为准；未匹配价格的模型只统计 tokens，费用显示为 `—`。
 
 ## 功能
 
@@ -55,6 +55,7 @@ WebUI：`插件` → `AstrBot 用量与费用` → 打开 `cost` 页面。
 - 数据来源：AstrBot 本地数据库 `data_v4.db` 中的 `provider_stats` 表（仅统计 `status='completed'` 的调用）。
 - 平台、私聊/群聊与对话标识来自 `provider_stats.umo`，回复数来自 `conversations` 表中的 assistant 消息。
 - 价格写在 `main.py` 顶部的 `PRICES` 中，单位：**元 / 百万 tokens**。当前包含 DeepSeek、OpenAI、Claude、Gemini、Qwen 的参考价；模型名按精确名和包含关系匹配。
+- 已知模型显示参考价估算金额；未匹配价格的模型只显示 tokens，金额显示 `—`。
 - 高峰时段：北京时间 **周一至周五 9:00–12:00、14:00–18:00**（不含法定节假日）；非 DeepSeek 模型通常使用固定参考价。
 - DeepSeek 价格来自 [DeepSeek 官方价目表](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)；其他模型价格为估算参考，官方调价时请同步修改 `PRICES`。
 
@@ -70,10 +71,11 @@ WebUI：`插件` → `AstrBot 用量与费用` → 打开 `cost` 页面。
 
 ## 说明
 
-- 统计与费用为**本地估算**，实际扣费以对应模型服务商账单为准；
+- 统计与费用为**本地估算**，实际扣费以对应模型服务商账单为准；已知模型金额为参考价估算，未知模型只统计 tokens；
 - 只统计 AstrBot 通过 provider 产生的调用，不包含其他程序使用同一 API Key 的消耗；
 - 对话回复数来自会话历史（全量），费用/tokens 为所选时间范围内。
 
 ## License
 
 MIT
+

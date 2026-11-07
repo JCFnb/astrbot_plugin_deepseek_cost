@@ -120,7 +120,7 @@ def _is_peak(dt: datetime) -> bool:
     return (9 <= h < 12) or (14 <= h < 18)
 
 
-def _price_for(model: str, dt: datetime) -> dict:
+def _price_for(model: str, dt: datetime) -> tuple[dict | None, bool]:
     raw = str(model or "").strip().lower()
     key = raw.split("/")[-1]
     table = PRICES.get(key)
@@ -129,8 +129,9 @@ def _price_for(model: str, dt: datetime) -> dict:
             if name in key:
                 table = PRICES[name]
                 break
-    table = table or DEFAULT_PRICE
-    return table["peak"] if _is_peak(dt) else table["idle"]
+    if table is None:
+        return None, False
+    return (table["peak"] if _is_peak(dt) else table["idle"]), True
 
 
 def _fmt_tokens(n: int) -> str:
@@ -285,8 +286,11 @@ def _collect(
             continue
         if model_filter and model != model_filter:
             continue
-        p = _price_for(model, dt)
-        c = (tin / 1_000_000) * p["miss"] + (tcached / 1_000_000) * p["cache"] + (tout / 1_000_000) * p["out"]
+        price, priced = _price_for(model, dt)
+        if price is None:
+            c = 0.0
+        else:
+            c = (tin / 1_000_000) * price["miss"] + (tcached / 1_000_000) * price["cache"] + (tout / 1_000_000) * price["out"]
         cost += c
         requests += 1
         total_in += tin
@@ -299,11 +303,12 @@ def _collect(
         else:
             idle_cost += c
             idle_tokens += tokens
-        m = by_model.setdefault(model, {"input": 0, "cache": 0, "output": 0, "cost": 0.0})
+        m = by_model.setdefault(model, {"input": 0, "cache": 0, "output": 0, "cost": 0.0, "priced": priced})
         m["input"] += tin
         m["cache"] += tcached
         m["output"] += tout
         m["cost"] += c
+        m["priced"] = bool(m.get("priced", True) and priced)
         day = dt.strftime("%Y-%m-%d")
         by_day[day] = by_day.get(day, 0.0) + c
         recent.append({
@@ -313,6 +318,7 @@ def _collect(
             "cache": tcached,
             "output": tout,
             "cost": round(c, 4),
+            "priced": priced,
             "umo": umo,
             "platform": platform,
         })
@@ -433,8 +439,10 @@ def _assistant_count() -> int:
 def _all_time_cost() -> float:
     cost = 0.0
     for model, tin, tcached, tout, dt, _umo in _iter_rows():
-        p = _price_for(model, dt)
-        cost += (tin / 1_000_000) * p["miss"] + (tcached / 1_000_000) * p["cache"] + (tout / 1_000_000) * p["out"]
+        price, priced = _price_for(model, dt)
+        if price is None:
+            continue
+        cost += (tin / 1_000_000) * price["miss"] + (tcached / 1_000_000) * price["cache"] + (tout / 1_000_000) * price["out"]
     return cost
 
 
@@ -445,9 +453,10 @@ def summarize(days: int = 1, date_str: str | None = None) -> str:
         return f"{label}没有 API 调用记录。"
     lines = [f"{label} API 用量（{s.get('start', '')} 至 {s.get('end', '')}）："]
     for model, m in sorted(s["models"].items(), key=lambda x: -x[1]["cost"]):
+        cost_text = f"约 ¥{m['cost']:.4f}" if m.get("priced", True) else "价格未配置"
         lines.append(
             f"· {model}：输入 {_fmt_tokens(m['input'])}（缓存命中 {_fmt_tokens(m['cache'])}），"
-            f"输出 {_fmt_tokens(m['output'])}，约 ¥{m['cost']:.4f}"
+            f"输出 {_fmt_tokens(m['output'])}，{cost_text}"
         )
     k = s["kinds"]
     lines.append(

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -334,6 +334,11 @@
   tbody td { border-bottom: 1px solid var(--line); }
   tbody tr:last-child td { border-bottom: 0; }
   .money { color: var(--green); font-weight: 700; }
+  .price-tag {
+    display: inline-block; padding: 2px 6px; border-radius: 999px;
+    font-size: 10px; color: var(--accent); background: rgba(59, 110, 246, .10);
+  }
+  .price-tag.missing { color: var(--amber); background: rgba(245, 158, 11, .13); }
   .muted-cell { color: var(--muted); }
   .empty { text-align: center !important; color: var(--muted); padding: 22px 14px !important; font-size: 12px; }
 
@@ -516,11 +521,11 @@
     <section class="card span-7" id="models">
       <div class="card-head">
         <h2>模型用量</h2>
-        <span class="hint" id="modelHint">输入 / 缓存 / 输出</span>
+        <span class="hint" id="modelHint">参考价估算 · 未知模型仅统计 tokens</span>
       </div>
       <div class="table-wrap"><table class="model-table">
-        <thead><tr><th>模型</th><th>输入</th><th class="hide-sm">缓存命中</th><th>输出</th><th>费用</th></tr></thead>
-        <tbody id="modelBody"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
+        <thead><tr><th>模型</th><th>价格来源</th><th>输入</th><th class="hide-sm">缓存命中</th><th>输出</th><th>费用</th></tr></thead>
+        <tbody id="modelBody"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
       </table></div>
     </section>
 
@@ -568,7 +573,7 @@
 
   <div class="footer">
     <span>数据来源：AstrBot provider_stats（本地）</span>
-    <span>估算值，实际扣费以各模型服务商账单为准</span>
+    <span>参考价估算，实际扣费以各模型服务商账单为准；未知模型不显示金额</span>
   </div>
 </div>
 
@@ -751,11 +756,12 @@ function renderModels(models) {
   $('modelBody').innerHTML = entries.length ? entries.map(([name, m]) => `
     <tr>
       <td><span class="model-name"><i></i>${esc(name)}</span></td>
+      <td>${m.priced === false ? '<span class="price-tag missing">未配置</span>' : '<span class="price-tag">参考价</span>'}</td>
       <td>${fmt(m.input)}</td>
       <td class="hide-sm">${fmt(m.cache)}</td>
       <td>${fmt(m.output)}</td>
-      <td class="money">${money(m.cost)}</td>
-    </tr>`).join('') : '<tr><td colspan="5" class="empty">该时段没有调用记录</td></tr>';
+      <td class="money">${m.priced === false ? '—' : money(m.cost)}</td>
+    </tr>`).join('') : '<tr><td colspan="6" class="empty">该时段没有调用记录</td></tr>';
 }
 
 let CONVS = [];
@@ -818,7 +824,7 @@ function renderRecent(recent, labelMap) {
   $('recentBody').innerHTML = recent.length ? recent.map(r => `
     <tr><td class="muted-cell">${esc(r.time)}</td><td>${esc(labelMap[r.umo] || '—')}</td><td>${esc(r.model)}</td>
       <td class="hide-sm">${fmt(r.input)}</td><td class="hide-sm">${fmt(r.cache)}</td>
-      <td>${fmt(r.output)}</td><td class="money">${money(r.cost)}</td></tr>`).join('')
+      <td>${fmt(r.output)}</td><td class="money">${r.priced === false ? '—' : money(r.cost)}</td></tr>`).join('')
     : '<tr><td colspan="7" class="empty">该时段没有调用记录</td></tr>';
 }
 
@@ -836,7 +842,7 @@ async function load(days = 7, date = '') {
   });
   $('convBody').innerHTML = '<tr><td colspan="8" class="empty">加载中…</td></tr>';
   $('recentBody').innerHTML = '<tr><td colspan="7" class="empty">加载中…</td></tr>';
-  $('modelBody').innerHTML = '<tr><td colspan="5" class="empty">加载中…</td></tr>';
+  $('modelBody').innerHTML = '<tr><td colspan="6" class="empty">加载中…</td></tr>';
   $('peakBody').innerHTML = '';
   $('kindList').innerHTML = '';
 
@@ -873,7 +879,7 @@ async function load(days = 7, date = '') {
     setText('cacheFoot', '缓存 ' + fmt(p.cache) + ' / 总 ' + fmt(p.tokens));
     setText('repliesFoot', '全部会话 assistant 消息');
     setText('trendHint', label);
-    setText('modelHint', label);
+    setText('modelHint', label + ' · 参考价估算，未知模型仅统计 tokens');
     setText('donutTotal', money(p.cost));
 
     const kinds = p.kinds || {};
@@ -990,5 +996,6 @@ load(7, '');
 </script>
 </body>
 </html>
+
 
 
