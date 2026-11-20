@@ -176,57 +176,6 @@ def _iter_rows():
         yield model or "unknown", int(tin or 0), int(tcached or 0), int(tout or 0), dt, umo or ""
 
 
-def _reply_counts() -> dict[str, int]:
-    con = sqlite3.connect(DB_PATH)
-    cur = con.cursor()
-    result: dict[str, int] = {}
-    for user_id, content in cur.execute("select user_id, content from conversations"):
-        try:
-            data = json.loads(content or "[]")
-        except Exception:
-            continue
-        result[user_id] = sum(1 for m in data if isinstance(m, dict) and m.get("role") == "assistant")
-    con.close()
-    return result
-
-
-def _reply_count_between(start: datetime, end: datetime | None = None, platform_filter: str = "") -> int:
-    """统计指定时间范围内的机器人回复数量。"""
-    try:
-        con = sqlite3.connect(DB_PATH)
-        cur = con.cursor()
-        end_s = (end or datetime.now(BJ)).strftime("%Y-%m-%d %H:%M:%S")
-        sql = "select count(*) from platform_message_history where sender_id='bot' and created_at >= ? and created_at < ?"
-        params = [start.strftime("%Y-%m-%d %H:%M:%S"), end_s]
-        if platform_filter:
-            sql += " and platform_id=?"
-            params.append(platform_filter)
-        count = cur.execute(sql, params).fetchone()[0]
-        con.close()
-        return int(count or 0)
-    except Exception:
-        return 0
-
-
-def _estimate_replies(start: datetime, end: datetime | None, platform_filter: str = "") -> int:
-    """消息历史缺失时，按会话调用占比估算回复数。"""
-    all_calls: dict[str, int] = {}
-    period_calls: dict[str, int] = {}
-    end_dt = end or datetime.now(BJ)
-    for _model, _tin, _tcached, _tout, dt, umo in _iter_rows():
-        if platform_filter and not str(umo).startswith(platform_filter + ":"):
-            continue
-        all_calls[umo] = all_calls.get(umo, 0) + 1
-        if start <= dt < end_dt:
-            period_calls[umo] = period_calls.get(umo, 0) + 1
-    total = 0.0
-    for umo, count in _reply_counts().items():
-        if not all_calls.get(umo):
-            continue
-        total += count * period_calls.get(umo, 0) / all_calls[umo]
-    return int(round(total))
-
-
 def _collect(
     days: int = 7,
     date_str: str | None = None,
@@ -275,8 +224,6 @@ def _collect(
     bucket_map: dict[str, dict] = {}
     hourly_map: dict[str, dict] = {}
     recent: list[dict] = []
-    replies_map = _reply_counts()
-    period_replies_history = _reply_count_between(start, end, platform_filter)
     convs: dict[str, dict] = {}
     kinds: dict[str, dict] = {
         k: {"requests": 0, "tokens": 0, "cost": 0.0} for k in KINDS
@@ -372,7 +319,6 @@ def _collect(
             "output": 0,
             "tokens": 0,
             "cost": 0.0,
-            "replies": replies_map.get(umo, 0),
         })
         conv["requests"] += 1
         conv["input"] += tin
@@ -437,11 +383,6 @@ def _collect(
                 "hours": hours,
             })
 
-    # 部分平台不写入 platform_message_history，历史不足时按会话调用占比估算。
-    replies_estimated = period_replies_history < requests * 0.5
-    period_replies = period_replies_history if not replies_estimated else _estimate_replies(start, end, platform_filter)
-    if not period_replies:
-        period_replies = requests if requests else 0
     recent.sort(key=lambda x: x["time"], reverse=True)
     total_tokens = total_in + total_cache + total_out
 
@@ -449,7 +390,6 @@ def _collect(
     for item in convs.values():
         item["cost"] = round(item["cost"], 4)
         item["avg_call"] = round(item["cost"] / item["requests"], 4) if item["requests"] else 0
-        item["avg_reply"] = round(item["cost"] / item["replies"], 4) if item["replies"] else 0
         item["cache_rate"] = (
             round(item["cache"] / item["tokens"] * 100, 1) if item["tokens"] else 0
         )
@@ -491,10 +431,7 @@ def _collect(
         "output": total_out,
         "tokens": total_tokens,
         "cost": round(cost, 4),
-        "assistant_messages": period_replies,
-        "replies_estimated": replies_estimated,
         "avg_request": round(cost / requests, 4) if requests else 0,
-        "avg_per_reply": round(cost / period_replies, 4) if period_replies else 0,
         "cache_rate": round(total_cache / total_tokens * 100, 1) if total_tokens else 0,
         "peak": {"cost": round(peak_cost, 4), "tokens": peak_tokens},
         "idle": {"cost": round(idle_cost, 4), "tokens": idle_tokens},
@@ -510,10 +447,6 @@ def _collect(
         "platforms": platforms_out,
         "facets": facets,
     }
-
-
-def _assistant_count() -> int:
-    return sum(_reply_counts().values())
 
 
 def _all_time_cost() -> float:
@@ -647,7 +580,6 @@ class CostPlugin(Star):
             days = 7
         days = max(1, min(days, 90))
         s = _collect(days, date_str or None, platform or None, model or None)
-        assistant = _assistant_count()
         total_cost = _all_time_cost()
         return {
             "ok": True,
@@ -655,9 +587,7 @@ class CostPlugin(Star):
             "date": s.get("date"),
             "period": s,
             "overall": {
-                "assistant_messages": assistant,
                 "all_time_cost": round(total_cost, 4),
-                "avg_per_reply": round(total_cost / assistant, 4) if assistant else 0,
             },
         }
 

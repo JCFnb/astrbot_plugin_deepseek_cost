@@ -587,26 +587,129 @@
   .table-foot .text-button:disabled { opacity: .4; cursor: default; }
 
   .kpi .label .src { margin-left: auto; padding: 2px 5px; border-radius: 4px; background: rgba(31,35,41,.06); color: var(--stats-muted); font-size: 8px; letter-spacing: .04em; }
+
+  /* visual alignment pass: equal card heights and consistent baselines */
+  .kpi-grid { align-items: stretch; }
+  .kpi { display: flex; flex-direction: column; justify-content: flex-start; }
+  .kpi .label { min-height: 18px; line-height: 18px; }
+  .kpi .label .src { margin-left: auto; line-height: 1; }
+  .kpi .value { min-height: 38px; display: flex; align-items: flex-end; margin-top: 1px; line-height: 1.08; }
+  .kpi .foot { margin-top: auto; min-height: 33px; display: flex; align-items: flex-end; line-height: 1.45; }
+  .grid { align-items: stretch; }
+  .grid > .card { display: flex; flex-direction: column; }
+  .grid > .card > .chart-wrap, .grid > .card > .donut-wrap { flex: 1 1 auto; }
+  .context-strip { align-items: baseline; }
+  .detail-strip { align-items: center; min-height: 20px; }
+  .top-bar { align-items: center; }
+  .card-head { align-items: baseline; min-height: 42px; }
+  .chart-foot { align-items: flex-end; }
+  @media (max-width: 1000px) { .kpi .value { min-height: 34px; } }
+  @media (max-width: 640px) { .kpi .foot { min-height: 0; } }
+
+
+  /* responsive alignment: avoid six cramped KPI columns and wrapped donut labels */
+  @media (max-width: 1600px) {
+    .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .donut-wrap { flex-direction: column; align-items: stretch; gap: 14px; }
+    .donut-box { align-self: center; }
+  }
+  @media (min-width: 1601px) {
+    .kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  .kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 600px) { .kpi-grid { grid-template-columns: 1fr; } }
+  .kpi .label { white-space: nowrap; }
+  .kind-row .top { white-space: nowrap; }
+  .kind-row .meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+
+  /* sidebar redesign: scenario groups, fixed top/bottom, scrollable middle */
+  .rail { height: calc(100vh - 44px); max-height: calc(100vh - 44px); overflow: hidden; }
+  .rail-top { flex: none; }
+  .rail-middle {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden;
+    padding: 4px 2px 10px 0; scrollbar-width: thin;
+  }
+  .rail-middle::-webkit-scrollbar { width: 6px; }
+  .rail-middle::-webkit-scrollbar-thumb { background: rgba(100,116,139,.24); border-radius: 999px; }
+  .rail-bottom { flex: none; padding-top: 12px; border-top: 1px solid rgba(100,116,139,.14); }
+  .nav-group { display: grid; gap: 4px; padding: 3px 0 7px; }
+  .nav-group + .nav-group { margin-top: 12px; padding-top: 15px; border-top: 1px solid rgba(100,116,139,.13); }
+  .group-title {
+    padding: 0 8px 5px; color: #8b98aa; font-size: 10px; font-weight: 700;
+    letter-spacing: .12em; text-transform: uppercase;
+  }
+  .rail-nav { gap: 3px; }
+  .nav-item { color: #5f6c7f; padding: 9px 11px; border-radius: 9px; }
+  .nav-item:hover { color: #172033; background: #f0f3fa; }
+  .nav-item.active {
+    color: #fff; background: #4f46e5; font-weight: 700;
+    box-shadow: 0 5px 14px rgba(79,70,229,.24);
+  }
+  .nav-item.active::before { background: #fff; box-shadow: none; }
+  .rail-cta { margin: 2px 0 0; }
+  .rail-footlinks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 8px; }
+  .rail-footlinks button {
+    border: 0; border-radius: 7px; background: transparent; color: #7a8799;
+    padding: 7px 4px; font-size: 10px; cursor: pointer;
+  }
+  .rail-footlinks button:hover { color: #172033; background: #eef1f7; }
+  .rail-scope { margin-top: 6px; padding: 9px 4px 0; font-size: 9.5px; }
+  @media (max-width: 1080px) {
+    .rail { height: auto; max-height: none; overflow: visible; }
+    .rail-middle { max-height: 46vh; overflow-y: auto; }
+    .rail-bottom { margin-top: 6px; }
+  }
+  @media (max-width: 680px) {
+    .rail-middle { max-height: none; }
+    .rail-footlinks { grid-template-columns: repeat(3, 1fr); }
+  }
+
 </style>
 </head>
 <body>
 <div class="app">
   <aside class="rail">
-    <div class="brand"><div><h1>AstrBot 用量</h1><p>本地用量 · 参考价估算</p></div></div>
-    <div class="rail-section">
-      <div class="rail-label">全局筛选</div>
-      <div class="m3-field"><label for="platformSelect">平台</label><select class="m3-select" id="platformSelect"><option value="">全部平台</option></select></div>
-      <div class="m3-field"><label for="modelSelect">模型</label><select class="m3-select" id="modelSelect"><option value="">全部模型</option></select></div>
-      <button class="text-button" id="resetFilters" type="button">清除筛选</button>
+    <div class="rail-top">
+      <div class="brand"><div><h1>AstrBot 用量</h1><p>本地用量 · 参考价估算</p></div></div>
+      <div class="rail-section">
+        <div class="rail-label">全局筛选</div>
+        <div class="m3-field"><label for="platformSelect">平台</label><select class="m3-select" id="platformSelect"><option value="">全部平台</option></select></div>
+        <div class="m3-field"><label for="modelSelect">模型</label><select class="m3-select" id="modelSelect"><option value="">全部模型</option></select></div>
+        <button class="text-button" id="resetFilters" type="button">清除筛选</button>
+      </div>
     </div>
-    <button class="rail-cta" id="pricePageBtn" type="button"><span class="cta-icon">¥</span><span class="cta-text"><b>模型价格参考</b><span>DeepSeek 参考价 · 可编辑</span></span></button>
-    <nav class="rail-nav" id="railNav">
-      <button class="nav-item active" data-view="overview" type="button">总览</button>
-      <button class="nav-item" data-view="models" type="button">模型用量</button>
-      <button class="nav-item" data-view="conversations" type="button">对话排行</button>
-      <button class="nav-item" data-view="recent" type="button">最近调用</button>
-    </nav>
-    <div class="rail-scope" id="sideScope">当前：全部平台 / 全部模型</div>
+
+    <div class="rail-middle">
+      <div class="nav-group">
+        <div class="group-title">用量分析</div>
+        <nav class="rail-nav" id="railNav">
+          <button class="nav-item active" data-view="overview" type="button">总览</button>
+          <button class="nav-item" data-view="models" type="button">模型用量</button>
+        </nav>
+      </div>
+      <div class="nav-group">
+        <div class="group-title">对话与调用</div>
+        <nav class="rail-nav">
+          <button class="nav-item" data-view="conversations" type="button">对话排行</button>
+          <button class="nav-item" data-view="recent" type="button">最近调用</button>
+        </nav>
+      </div>
+      <div class="nav-group">
+        <div class="group-title">工具</div>
+        <button class="rail-cta" id="pricePageBtn" type="button"><span class="cta-icon">¥</span><span class="cta-text"><b>模型价格参考</b><span>DeepSeek 参考价 · 可编辑</span></span></button>
+      </div>
+    </div>
+
+    <div class="rail-bottom">
+      <div class="rail-footlinks">
+        <button type="button" data-side-action="settings">设置</button>
+        <button type="button" data-side-action="help">帮助</button>
+        <button type="button" data-side-action="account">账户</button>
+      </div>
+      <div class="rail-scope" id="sideScope">当前：全部平台 / 全部模型</div>
+    </div>
   </aside>
 
   <main class="content">
@@ -625,8 +728,6 @@
         <div class="kpi cost"><div class="label"><i></i>时段花费</div><div class="value" id="cost">—</div><div class="foot" id="costFoot">输入 / 缓存 / 输出</div></div>
         <div class="kpi"><div class="label"><i></i>LLM 调用次数 <span class="src">LLM</span></div><div class="value" id="requests">—</div><div class="foot" id="requestsFoot">provider_stats</div></div>
         <div class="kpi violet"><div class="label"><i></i>平均每次调用</div><div class="value" id="avgReq">—</div><div class="foot">时段花费 ÷ LLM 调用次数</div></div>
-        <div class="kpi"><div class="label"><i></i>回复消息数 <span class="src">MSG</span></div><div class="value" id="replies">—</div><div class="foot" id="repliesFoot">消息记录 / 估算</div></div>
-        <div class="kpi"><div class="label"><i></i>平均每次回复</div><div class="value" id="avg">—</div><div class="foot">时段花费 ÷ 回复数（估算）</div></div>
         <div class="kpi green"><div class="label"><i></i>缓存命中率</div><div class="value" id="cacheRate">—</div><div class="foot" id="cacheFoot">缓存 tokens 占比</div></div>
       </div>
       <div class="detail-strip"><span>总 tokens <b id="tokens">—</b></span><span>历史总花费 <b id="allTimeCost">—</b></span></div>
@@ -663,6 +764,33 @@
 
     <div class="footer"><span>数据来源：AstrBot provider_stats</span><span>参考价估算，实际以服务商账单为准；非 DeepSeek 模型仅统计 tokens</span></div>
   </main>
+</div>
+
+<div class="dialog-scrim" id="helpModal" aria-hidden="true">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="helpTitle" style="width:min(560px,100%)">
+    <div class="dialog-head"><div><h2 id="helpTitle">使用帮助</h2><p>本地统计口径与常用操作。</p></div><button class="icon-btn" type="button" data-close-help aria-label="关闭">×</button></div>
+    <div class="dialog-body" style="font-size:12px;line-height:1.9;color:var(--muted)">
+      <p><b style="color:var(--text)">数据来源：</b>AstrBot <code>provider_stats</code>，只统计已完成的模型调用。</p>
+      <p><b style="color:var(--text)">费用：</b>按本地参考价估算，不包含服务商实际折扣、赠送额度或汇率变化。</p>
+      <p><b style="color:var(--text)">筛选：</b>左侧平台、模型会影响总览、趋势和对话排行；日期范围在右上角切换。</p>
+      <p><b style="color:var(--text)">价格：</b>点击“模型价格参考”可编辑高峰/空闲参考价，保存后立即生效。</p>
+      <p><b style="color:var(--text)">回复消息数：</b>当前版本不展示该指标，因为 AstrBot 没有完整的出站消息流水。</p>
+    </div>
+    <div class="dialog-foot"><span class="status">参考价仅用于本地估算</span><div class="actions"><button class="btn filled" type="button" data-close-help>知道了</button></div></div>
+  </div>
+</div>
+
+<div class="dialog-scrim" id="accountModal" aria-hidden="true">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="accountTitle" style="width:min(520px,100%)">
+    <div class="dialog-head"><div><h2 id="accountTitle">账户与数据</h2><p>当前统计范围和本地数据源。</p></div><button class="icon-btn" type="button" data-close-account aria-label="关闭">×</button></div>
+    <div class="dialog-body" style="font-size:12px;line-height:1.9;color:var(--muted)">
+      <p><b style="color:var(--text)">当前平台：</b><span id="accountPlatform">全部平台</span></p>
+      <p><b style="color:var(--text)">当前模型：</b><span id="accountModel">全部模型</span></p>
+      <p><b style="color:var(--text)">数据位置：</b>AstrBot 本地 data_v4.db</p>
+      <p><b style="color:var(--text)">说明：</b>这是本地插件页面，不存在云端账户；这里的“账户”指当前 AstrBot 实例与筛选范围。</p>
+    </div>
+    <div class="dialog-foot"><span class="status">本地只读展示</span><div class="actions"><button class="btn filled" type="button" data-close-account>关闭</button></div></div>
+  </div>
 </div>
 
 <div class="dialog-scrim" id="priceModal" aria-hidden="true">
@@ -912,13 +1040,12 @@ async function load(days=7, date='') {
     const d = await view.apiGet('/summary', params); if (seq!==loadSeq) return;
     const p = d.period||{}, o = d.overall||{}, label = p.label || (CURRENT.date || '近 ' + (p.days||CURRENT.days) + ' 天');
     animateNumber($('cost'), p.cost||0, money); animateNumber($('requests'), p.requests||0, v=>Math.round(v).toLocaleString());
-    animateNumber($('replies'), p.assistant_messages||0, v=>Math.round(v).toLocaleString()); animateNumber($('avg'), p.avg_per_reply||0, money);
     animateNumber($('avgReq'), p.avg_request||0, money); animateNumber($('cacheRate'), p.cache_rate||0, v=>v.toFixed(1)+'%');
     animateNumber($('tokens'), p.tokens||0, fmt); setText('allTimeCost', money(o.all_time_cost));
     setText('periodLabel', label); setText('periodRange', '数据范围：'+(p.start||'—')+' 至 '+(p.end||'现在')); setText('rangeHint', label);
     const unpriced = Object.values(p.models||{}).some(m => m.priced === false);
     setText('costFoot', '输入 '+fmt(p.input)+' · 缓存 '+fmt(p.cache)+' · 输出 '+fmt(p.output) + (unpriced ? ' · 未配置模型未计费' : ''));
-    setText('requestsFoot', 'provider_stats · 总 tokens ' + fmt(p.tokens)); setText('cacheFoot', '缓存 '+fmt(p.cache)+' / 总 '+fmt(p.tokens)); setText('repliesFoot', p.replies_estimated ? '按请求数估算 · 消息历史不足' : '当前范围内的 assistant 消息');
+    setText('requestsFoot', 'provider_stats · 总 tokens ' + fmt(p.tokens)); setText('cacheFoot', '缓存 '+fmt(p.cache)+' / 总 '+fmt(p.tokens));
     setText('trendHint', label); setText('donutTotal', money(p.cost));
     const kinds = p.kinds||{}; drawDonut(kinds); renderKinds(kinds);
     drawLine(p.series||[]); renderPeak(p.peak||{},p.idle||{},p.standard||{}); renderModels(p.models||{}); drawBars(p.series||[]);
@@ -1064,7 +1191,7 @@ $('datePicker').addEventListener('change', () => { const v=$('datePicker').value
 $('platformSelect').addEventListener('change', ev => { PLATFORM_FILTER=ev.target.value; load(CURRENT.days,CURRENT.date); });
 $('modelSelect').addEventListener('change', ev => { MODEL_FILTER=ev.target.value; load(CURRENT.days,CURRENT.date); });
 $('resetFilters').addEventListener('click', () => { PLATFORM_FILTER='';MODEL_FILTER='';load(CURRENT.days,CURRENT.date); });
-$('railNav').addEventListener('click', ev => { const b=ev.target.closest('.nav-item'); if(b) switchView(b.dataset.view); });
+document.querySelector('.rail-middle').addEventListener('click', ev => { const b=ev.target.closest('.nav-item'); if(b) switchView(b.dataset.view); });
 $('convMore').addEventListener('click', () => { CONV_LIMIT = CONV_LIMIT > 10 ? 10 : 9999; renderConvs(); });
 $('recentMore').addEventListener('click', () => { RECENT_EXPANDED = true; renderRecentPage(); });
 $('recentPrev').addEventListener('click', () => { if (RECENT_PAGE > 0) { RECENT_PAGE--; renderRecentPage(); } });
@@ -1082,6 +1209,21 @@ $('modelBody').addEventListener('click', ev => {
   const btn = ev.target.closest('[data-price-model]');
   if (btn) openPriceDialog(btn.dataset.priceModel);
 });
+document.querySelectorAll('[data-side-action]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const action = btn.dataset.sideAction;
+    if (action === 'settings') openPriceDialog();
+    else if (action === 'help') { $('helpModal').classList.add('open'); $('helpModal').setAttribute('aria-hidden','false'); }
+    else if (action === 'account') {
+      const p = $('platformSelect')?.selectedOptions?.[0]?.textContent || '全部平台';
+      const m = $('modelSelect')?.selectedOptions?.[0]?.textContent || '全部模型';
+      setText('accountPlatform', p); setText('accountModel', m);
+      $('accountModal').classList.add('open'); $('accountModal').setAttribute('aria-hidden','false');
+    }
+  });
+});
+document.querySelectorAll('[data-close-help]').forEach(btn => btn.addEventListener('click', () => { $('helpModal').classList.remove('open'); $('helpModal').setAttribute('aria-hidden','true'); }));
+document.querySelectorAll('[data-close-account]').forEach(btn => btn.addEventListener('click', () => { $('accountModal').classList.remove('open'); $('accountModal').setAttribute('aria-hidden','true'); }));
 $('pricePageBtn').addEventListener('click', () => openPriceDialog());
 $('savePrices').addEventListener('click', savePrices);
 $('resetPrices').addEventListener('click', resetPrices);
@@ -1095,7 +1237,3 @@ load(7,'');
 </script>
 </body>
 </html>
-
-
-
-
